@@ -1,5 +1,6 @@
 package com.eoframework.client;
 
+import com.eoframework.EOFramework;
 import com.eoframework.network.BlockBreakRequestC2SPayload;
 import com.eoframework.network.BlockPlaceRequestC2SPayload;
 import net.minecraft.client.Minecraft;
@@ -45,8 +46,33 @@ public class ClientOwnedBlockRuntime {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return false;
 
-        UUID owner = CELL_OWNERS.get(CellKey.from(pos));
-        return owner != null && owner.equals(mc.player.getUUID());
+        UUID owner = getKnownCellOwner(pos);
+        if (owner == null) {
+            return true;
+        }
+
+        return owner.equals(mc.player.getUUID());
+    }
+
+    public static UUID getKnownCellOwner(BlockPos pos) {
+        return CELL_OWNERS.get(CellKey.from(pos));
+    }
+
+    public static void logOwnershipDecision(String method, BlockPos pos, boolean cancelled) {
+        Minecraft mc = Minecraft.getInstance();
+        UUID playerUuid = mc.player != null ? mc.player.getUUID() : null;
+        UUID owner = getKnownCellOwner(pos);
+        boolean isOwner = mc.player != null && mc.level != null && (owner == null || owner.equals(playerUuid));
+
+        EOFramework.LOGGER.info(
+                "[EOF BlockBreak] method={} action={} pos={} knownOwner={} player={} isOwner={}",
+                method,
+                cancelled ? "cancel" : "allow",
+                pos,
+                owner,
+                playerUuid,
+                isOwner
+        );
     }
 
     public static void setCellOwner(int cellX, int cellY, int cellZ, UUID owner) {
