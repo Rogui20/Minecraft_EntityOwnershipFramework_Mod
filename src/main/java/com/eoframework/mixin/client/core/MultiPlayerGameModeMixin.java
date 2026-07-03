@@ -70,22 +70,30 @@ public abstract class MultiPlayerGameModeMixin {
 
     @Inject(method = "startDestroyBlock", at = @At("HEAD"), cancellable = true)
     private void eof$startOwnerAuthoritativeBreak(BlockPos pos, Direction face, CallbackInfoReturnable<Boolean> cir) {
-        if (ClientBlockBreakRuntime.beginNonOwnerAssist(pos)) {
-            cir.setReturnValue(true);
-            cir.cancel();
+        if (ClientOwnedBlockRuntime.isCellOwnedByMe(pos)) {
+            ClientOwnedBlockRuntime.logOwnershipDecision("startDestroyBlock", pos, false);
+            return;
         }
+
+        ClientBlockBreakRuntime.beginNonOwnerAssist(pos);
+        ClientOwnedBlockRuntime.logOwnershipDecision("startDestroyBlock", pos, true);
+        cir.setReturnValue(true);
+        cir.cancel();
     }
 
     @Inject(method = "continueDestroyBlock", at = @At("HEAD"), cancellable = true)
     private void eof$continueOwnerAuthoritativeBreak(BlockPos pos, Direction face, CallbackInfoReturnable<Boolean> cir) {
         Minecraft mc = Minecraft.getInstance();
-        if (ClientBlockBreakRuntime.continueNonOwnerAssist(pos)) {
+        if (!ClientOwnedBlockRuntime.isCellOwnedByMe(pos)) {
+            ClientBlockBreakRuntime.continueNonOwnerAssist(pos);
+            ClientOwnedBlockRuntime.logOwnershipDecision("continueDestroyBlock", pos, true);
             cir.setReturnValue(true);
             cir.cancel();
             return;
         }
 
-        if (mc.level == null || mc.player == null || !ClientOwnedBlockRuntime.isCellOwnedByMe(pos)) return;
+        ClientOwnedBlockRuntime.logOwnershipDecision("continueDestroyBlock", pos, false);
+        if (mc.level == null || mc.player == null) return;
         BlockState state = mc.level.getBlockState(pos);
         if (state.isAir()) return;
 
@@ -122,12 +130,15 @@ public abstract class MultiPlayerGameModeMixin {
         if (mc.level == null || mc.player == null || mc.gameMode == null) return;
 
         if (!ClientOwnedBlockRuntime.isCellOwnedByMe(pos)) {
+            ClientOwnedBlockRuntime.logOwnershipDecision("destroyBlock", pos, true);
             ClientOwnedBlockRuntime.requestBreakAsNonOwner(pos);
 
             cir.setReturnValue(false);
             cir.cancel();
             return;
         }
+
+        ClientOwnedBlockRuntime.logOwnershipDecision("destroyBlock", pos, false);
 
         BlockState state = mc.level.getBlockState(pos);
         if (state.isAir()) return;
