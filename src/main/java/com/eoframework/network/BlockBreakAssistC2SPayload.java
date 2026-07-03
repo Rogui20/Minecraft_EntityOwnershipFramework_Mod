@@ -36,14 +36,39 @@ public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active) implement
             BlockPos pos = payload.pos();
 
             if (!level.hasChunkAt(pos)) return;
-            if (player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D) > 8.0D * 8.0D) return;
             if (level.isEmptyBlock(pos) && payload.active()) return;
 
             var ownerUuid = BlockOwnershipManager.getOrAssignOwner(level, pos, player);
+            EOFramework.LOGGER.info(
+                    "[EOF BlockBreakAssist] pos={} owner={} requester={} active={}",
+                    pos,
+                    ownerUuid,
+                    player.getUUID(),
+                    payload.active()
+            );
+
             if (ownerUuid.equals(player.getUUID())) return;
 
+            if (player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D) > 8.0D * 8.0D) {
+                EOFramework.LOGGER.info(
+                        "[EOF BlockBreakAssist] reject requester too far pos={} owner={} requester={}",
+                        pos,
+                        ownerUuid,
+                        player.getUUID()
+                );
+                return;
+            }
+
             ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerUuid);
-            if (owner == null) return;
+            if (owner == null) {
+                EOFramework.LOGGER.info(
+                        "[EOF BlockBreakAssist] owner offline/invalid pos={} owner={} requester={}",
+                        pos,
+                        ownerUuid,
+                        player.getUUID()
+                );
+                return;
+            }
 
             PacketDistributor.sendToPlayer(owner, new BlockBreakAssistS2CPayload(player.getUUID(), pos, payload.active()));
         });

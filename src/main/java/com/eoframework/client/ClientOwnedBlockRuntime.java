@@ -58,6 +58,14 @@ public class ClientOwnedBlockRuntime {
         return CELL_OWNERS.get(CellKey.from(pos));
     }
 
+    public static boolean isKnownCellOwnedByMe(BlockPos pos) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null) return false;
+
+        UUID owner = getKnownCellOwner(pos);
+        return owner != null && owner.equals(mc.player.getUUID());
+    }
+
     public static void logOwnershipDecision(String method, BlockPos pos, boolean cancelled) {
         Minecraft mc = Minecraft.getInstance();
         UUID playerUuid = mc.player != null ? mc.player.getUUID() : null;
@@ -88,10 +96,35 @@ public class ClientOwnedBlockRuntime {
     }
 
     public static void notifyOwnerBreakWithClientDrops(BlockPos pos) {
-        PacketDistributor.sendToServer(new BlockBreakRequestC2SPayload(pos, true));
+        notifyOwnerBreakWithClientDrops(pos, true);
     }
 
-    public static void spawnOwnerDrops(BlockPos pos, BlockState state, ItemStack tool) {
+    public static void notifyOwnerBreakWithClientDrops(BlockPos pos, boolean clientSpawnedDrops) {
+        PacketDistributor.sendToServer(new BlockBreakRequestC2SPayload(pos, clientSpawnedDrops));
+    }
+
+    public static boolean spawnOwnerDrops(BlockPos pos, BlockState state, ItemStack tool) {
+        Minecraft mc = Minecraft.getInstance();
+        UUID localPlayer = mc.player != null ? mc.player.getUUID() : null;
+        UUID owner = getKnownCellOwner(pos);
+
+        if (!isKnownCellOwnedByMe(pos)) {
+            EOFramework.LOGGER.info(
+                    "[EOF spawnOwnerDrops] skip non-owner pos={} owner={} executor={}",
+                    pos,
+                    owner,
+                    localPlayer
+            );
+            return false;
+        }
+
+        EOFramework.LOGGER.info(
+                "[EOF spawnOwnerDrops] execute pos={} owner={} executor={}",
+                pos,
+                owner,
+                localPlayer
+        );
+
         for (ItemStack drop : ClientAuthBlockDrops.getPredictedDrops(state, tool)) {
             if (!drop.isEmpty()) {
                 ClientAuthEntities.spawnAndSendItem(drop.copy(), pos);
@@ -107,6 +140,8 @@ public class ClientOwnedBlockRuntime {
                 }
             }
         }
+
+        return true;
     }
 
     private record CellKey(int x, int y, int z) {
@@ -123,9 +158,24 @@ public class ClientOwnedBlockRuntime {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
 
-        if (!isCellOwnedByMe(pos)) {
+        if (!isKnownCellOwnedByMe(pos)) {
+            EOFramework.LOGGER.info(
+                    "[EOF RemoteBreakRequest] skip non-owner pos={} owner={} requester={} executor={}",
+                    pos,
+                    getKnownCellOwner(pos),
+                    requester,
+                    mc.player.getUUID()
+            );
             return;
         }
+
+        EOFramework.LOGGER.info(
+                "[EOF RemoteBreakRequest] owner handling pos={} owner={} requester={} executor={}",
+                pos,
+                getKnownCellOwner(pos),
+                requester,
+                mc.player.getUUID()
+        );
 
         BlockState state = mc.level.getBlockState(pos);
         if (state.isAir()) {
@@ -141,9 +191,9 @@ public class ClientOwnedBlockRuntime {
         suppressBreakEcho(pos, 100);
 
         // Owner spawna drops client-auth.
-        spawnOwnerDrops(pos, state, tool);
+        boolean spawnedDrops = spawnOwnerDrops(pos, state, tool);
 
-        // Owner confirma ao servidor que quebrou e já spawnou os drops.
-        notifyOwnerBreakWithClientDrops(pos);
+        // Owner confirma ao servidor se quebrou e já spawnou os drops.
+        notifyOwnerBreakWithClientDrops(pos, spawnedDrops);
     }
 }
