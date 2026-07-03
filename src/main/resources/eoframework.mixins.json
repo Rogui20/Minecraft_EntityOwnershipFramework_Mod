@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "package": "com.eoframework.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "common.ServerPlayerGameModeMixin",
+    "common.ServerPlayerGameModeOwnershipMixin"
+
+  ],
+  "client": [
+    "client.core.ClientPacketListenerMixin",
+    "client.core.MultiPlayerGameModeMixin"
+
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

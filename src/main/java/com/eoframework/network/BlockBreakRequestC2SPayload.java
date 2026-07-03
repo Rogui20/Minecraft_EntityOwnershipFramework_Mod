@@ -1,0 +1,118 @@
+package com.eoframework.network;
+
+import com.eoframework.EOFramework;
+import com.eoframework.common.BlockOwnershipManager;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.handling.IPayloadContext;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+public record BlockBreakRequestC2SPayload(
+        BlockPos pos,
+        boolean clientSpawnedDrops
+) implements CustomPacketPayload {
+    public static final Type<BlockBreakRequestC2SPayload> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(EOFramework.MODID, "block_break_request_c2s"));
+
+    public static final StreamCodec<RegistryFriendlyByteBuf, BlockBreakRequestC2SPayload> STREAM_CODEC =
+            StreamCodec.composite(
+                    BlockPos.STREAM_CODEC, BlockBreakRequestC2SPayload::pos,
+                    ByteBufCodecs.BOOL, BlockBreakRequestC2SPayload::clientSpawnedDrops,
+                    BlockBreakRequestC2SPayload::new
+            );
+
+    @Override
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
+    }
+
+    public static void handle(BlockBreakRequestC2SPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (!(context.player() instanceof ServerPlayer player)) return;
+
+            var level = player.serverLevel();
+            BlockPos pos = payload.pos();
+
+            if (!level.hasChunkAt(pos)) return;
+            if (player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D) > 8.0D * 8.0D) return;
+            if (level.isEmptyBlock(pos)) return;
+
+            UUID ownerUuid = BlockOwnershipManager.getOrAssignOwner(level, pos, player);
+
+            if (!ownerUuid.equals(player.getUUID())) {
+                ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerUuid);
+
+                if (owner != null) {
+                    PacketDistributor.sendToPlayer(
+                            owner,
+                            new BlockBreakOwnerRequestS2CPayload(
+                                    player.getUUID(),
+                                    pos,
+                                    payload.clientSpawnedDrops()
+                            )
+                    );
+                }
+
+                return;
+            }
+
+            var state = level.getBlockState(pos);
+            BlockEntity blockEntity = level.getBlockEntity(pos);
+            ItemStack tool = player.getMainHandItem();
+
+            boolean creative = player.getAbilities().instabuild;
+            List<ItemStack> drops = new ArrayList<>();
+
+            if (!creative && !payload.clientSpawnedDrops()) {
+                drops.addAll(Block.getDrops(state, level, pos, blockEntity, player, tool));
+
+                if (blockEntity instanceof Container container) {
+                    for (int i = 0; i < container.getContainerSize(); i++) {
+                        ItemStack stack = container.getItem(i);
+                        if (!stack.isEmpty()) {
+                            drops.add(stack.copy());
+                        }
+                    }
+                }
+            }
+
+            level.destroyBlock(pos, false, player);
+
+            if (creative || payload.clientSpawnedDrops()) {
+                return;
+            }
+
+            for (ItemStack drop : drops) {
+                if (drop.isEmpty()) continue;
+
+                ItemEntity item = new ItemEntity(
+                        level,
+                        pos.getX() + 0.5D,
+                        pos.getY() + 0.5D,
+                        pos.getZ() + 0.5D,
+                        drop.copy()
+                );
+
+                item.setTarget(player.getUUID());
+                item.setNoPickUpDelay();
+                item.setThrower(player);
+
+                level.addFreshEntity(item);
+            }
+        });
+    }
+}
