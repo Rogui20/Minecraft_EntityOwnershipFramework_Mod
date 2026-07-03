@@ -1,23 +1,41 @@
 package com.eoframework.mixin.client.core;
 
+import com.eoframework.client.ClientBlockBreakRuntime;
 import com.eoframework.client.ClientOwnedBlockRuntime;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(MultiPlayerGameMode.class)
-public class MultiPlayerGameModeMixin {
+public abstract class MultiPlayerGameModeMixin {
+    @Shadow
+    private float destroyProgress;
+
+    @Shadow
+    private float destroyTicks;
+
+    @Shadow
+    private int destroyDelay;
+
+    @Shadow
+    private boolean isDestroying;
+
+    @Shadow
+    public abstract boolean destroyBlock(BlockPos pos);
+
     @Unique
     private BlockPos eof$pendingOwnerBreakPos;
 
@@ -47,6 +65,55 @@ public class MultiPlayerGameModeMixin {
             cir.setReturnValue(InteractionResult.SUCCESS);
             cir.cancel();
         }
+    }
+
+
+    @Inject(method = "startDestroyBlock", at = @At("HEAD"), cancellable = true)
+    private void eof$startOwnerAuthoritativeBreak(BlockPos pos, Direction face, CallbackInfoReturnable<Boolean> cir) {
+        if (ClientBlockBreakRuntime.beginNonOwnerAssist(pos)) {
+            cir.setReturnValue(true);
+            cir.cancel();
+        }
+    }
+
+    @Inject(method = "continueDestroyBlock", at = @At("HEAD"), cancellable = true)
+    private void eof$continueOwnerAuthoritativeBreak(BlockPos pos, Direction face, CallbackInfoReturnable<Boolean> cir) {
+        Minecraft mc = Minecraft.getInstance();
+        if (ClientBlockBreakRuntime.continueNonOwnerAssist(pos)) {
+            cir.setReturnValue(true);
+            cir.cancel();
+            return;
+        }
+
+        if (mc.level == null || mc.player == null || !ClientOwnedBlockRuntime.isCellOwnedByMe(pos)) return;
+        BlockState state = mc.level.getBlockState(pos);
+        if (state.isAir()) return;
+
+        this.destroyProgress += ClientBlockBreakRuntime.assistedProgress(pos, state);
+        if (this.destroyProgress >= 1.0F) {
+            this.isDestroying = false;
+            this.destroyBlock(pos);
+            this.destroyProgress = 0.0F;
+            this.destroyTicks = 0.0F;
+            this.destroyDelay = 5;
+            ClientBlockBreakRuntime.sendOwnerProgress(pos, -1);
+            cir.setReturnValue(true);
+            cir.cancel();
+        }
+    }
+
+    @Inject(method = "continueDestroyBlock", at = @At("RETURN"))
+    private void eof$broadcastOwnerBreakProgress(BlockPos pos, Direction face, CallbackInfoReturnable<Boolean> cir) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || !ClientOwnedBlockRuntime.isCellOwnedByMe(pos)) return;
+        int stage = this.destroyProgress <= 0.0F ? -1 : (int)(this.destroyProgress * 10.0F);
+        if (stage > 9) stage = 9;
+        ClientBlockBreakRuntime.sendOwnerProgress(pos, stage);
+    }
+
+    @Inject(method = "stopDestroyBlock", at = @At("HEAD"))
+    private void eof$stopOwnerAuthoritativeBreak(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        ClientBlockBreakRuntime.endNonOwnerAssist();
     }
 
     @Inject(method = "destroyBlock", at = @At("HEAD"), cancellable = true)
