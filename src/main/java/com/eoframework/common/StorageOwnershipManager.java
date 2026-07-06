@@ -365,9 +365,9 @@ public class StorageOwnershipManager {
         );
 
         EOFramework.LOGGER.info(
-                "[EOF Storage] forwarded non-owner slot request pos={} slot={} requester={} owner={}",
-                clickedPos,
+                "[EOF Storage] request forwarded to owner slot={} pos={} requester={} owner={}",
                 slot,
+                clickedPos,
                 requester.getGameProfile().getName(),
                 owner.getGameProfile().getName()
         );
@@ -380,6 +380,7 @@ public class StorageOwnershipManager {
             ServerPlayer owner,
             UUID requesterUuid,
             BlockPos clickedPos,
+            int slot,
             boolean accepted,
             boolean quickMove,
             ItemStack stack
@@ -428,7 +429,8 @@ public class StorageOwnershipManager {
         broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
 
         EOFramework.LOGGER.info(
-                "[EOF Storage] owner approved slot item={} requester={} owner={}",
+                "[EOF Storage] owner approved/denied slot={} accepted=true item={} requester={} owner={}",
+                slot,
                 stack,
                 requester.getGameProfile().getName(),
                 owner.getGameProfile().getName()

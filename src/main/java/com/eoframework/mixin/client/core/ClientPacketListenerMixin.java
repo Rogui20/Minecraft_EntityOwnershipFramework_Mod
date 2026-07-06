@@ -52,6 +52,19 @@ public class ClientPacketListenerMixin {
         }
     }
 
+    @Inject(method = "handleSoundEvent", at = @At("HEAD"), cancellable = true)
+    private void eof$suppressStorageSoundEcho(ClientboundSoundPacket packet, CallbackInfo ci) {
+        if (ClientLocalStorageSession.shouldSuppressStorageSound(
+                packet.getX(),
+                packet.getY(),
+                packet.getZ(),
+                packet.getSound().value(),
+                packet.getSource()
+        )) {
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "handleOpenScreen", at = @At("HEAD"), cancellable = true)
     private void eof$suppressStorageOpenScreen(ClientboundOpenScreenPacket packet, CallbackInfo ci) {
         if (ClientLocalStorageSession.shouldSuppressMenuPacket()) {

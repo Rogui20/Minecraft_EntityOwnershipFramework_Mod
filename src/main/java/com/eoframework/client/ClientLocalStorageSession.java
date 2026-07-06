@@ -4,6 +4,9 @@ import com.eoframework.EOFramework;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -28,6 +31,39 @@ public class ClientLocalStorageSession {
         Minecraft mc = Minecraft.getInstance();
         active = false;
         suppressUntil = mc.level == null ? 0 : mc.level.getGameTime() + ticks;
+    }
+
+    public static boolean shouldSuppressStorageSound(double x, double y, double z, SoundEvent sound, SoundSource source) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || source != SoundSource.BLOCKS || !isStorageSound(sound)) return false;
+
+        BlockPos soundPos = BlockPos.containing(x, y, z);
+        long now = mc.level.getGameTime();
+        boolean suppress = (active || now <= suppressUntil) && isNearSuppressedStorage(soundPos);
+        if (suppress) {
+            EOFramework.LOGGER.info("[EOF StorageSession] suppress storage sound pos={} sound={}", soundPos, sound);
+        }
+        return suppress;
+    }
+
+    private static boolean isStorageSound(SoundEvent sound) {
+        return sound == SoundEvents.CHEST_OPEN
+                || sound == SoundEvents.CHEST_CLOSE
+                || sound == SoundEvents.BARREL_OPEN
+                || sound == SoundEvents.BARREL_CLOSE
+                || sound == SoundEvents.SHULKER_BOX_OPEN
+                || sound == SoundEvents.SHULKER_BOX_CLOSE;
+    }
+
+    private static boolean isNearSuppressedStorage(BlockPos pos) {
+        for (BlockPos storagePos : positions) {
+            if (Math.abs(storagePos.getX() - pos.getX()) <= 1
+                    && Math.abs(storagePos.getY() - pos.getY()) <= 1
+                    && Math.abs(storagePos.getZ() - pos.getZ()) <= 1) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean shouldSuppressBlockEvent(BlockPos pos) {

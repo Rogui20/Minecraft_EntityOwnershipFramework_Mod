@@ -63,6 +63,7 @@ public record StorageSlotResponseC2SPayload(
                     owner,
                     payload.requester(),
                     payload.pos(),
+                    payload.slot(),
                     payload.accepted(),
                     payload.quickMove(),
                     payload.stack()
