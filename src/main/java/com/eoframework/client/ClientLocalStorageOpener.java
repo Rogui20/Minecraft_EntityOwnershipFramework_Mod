@@ -20,14 +20,17 @@ public class ClientLocalStorageOpener {
             return false;
         }
 
-        List<ItemStack> cached = ClientStorageCache.get(pos);
+        BlockPos canonicalPos = ClientStorageCache.canonicalPos(pos);
+        List<ItemStack> cached = ClientStorageCache.get(canonicalPos);
         if (cached.isEmpty()) {
             EOFramework.LOGGER.info("[EOF Storage] cached storage empty/invalid at {}", pos);
             return false;
         }
 
         int size = cached.size();
-        int rows = Math.max(1, Math.min(6, (size + 8) / 9));
+        int rows = ClientStorageCache.positions(canonicalPos).size() > 1
+                ? 6
+                : Math.max(1, Math.min(6, (size + 8) / 9));
         int menuSize = rows * 9;
 
         SimpleContainer container = new SimpleContainer(menuSize);
@@ -56,8 +59,8 @@ public class ClientLocalStorageOpener {
         );
 
         mc.player.containerMenu = menu;
-        boolean ownerView = ClientStorageCache.isOwner(pos);
-        mc.setScreen(new ClientLocalStorageScreen(menu, mc.player.getInventory(), title, pos, ownerView));
+        boolean ownerView = ClientStorageCache.isOwner(canonicalPos);
+        mc.setScreen(new ClientLocalStorageScreen(menu, mc.player.getInventory(), title, canonicalPos, ownerView));
 
         EOFramework.LOGGER.info(
                 "[EOF Storage] opened cached storage pos={} slots={} rows={}",
@@ -65,8 +68,8 @@ public class ClientLocalStorageOpener {
                 size,
                 rows
         );
-        ClientLocalStorageSession.begin(ClientStorageAnimations.animationPositions(pos));
-        ClientStorageAnimations.open(pos);
+        ClientLocalStorageSession.begin(ClientStorageAnimations.animationPositions(canonicalPos));
+        ClientStorageAnimations.open(canonicalPos);
         return true;
     }
 }

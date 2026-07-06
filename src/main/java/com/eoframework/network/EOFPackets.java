@@ -45,6 +45,12 @@ public class EOFPackets {
         );
 
         registrar.playToServer(
+                StorageOwnerSessionC2SPayload.TYPE,
+                StorageOwnerSessionC2SPayload.STREAM_CODEC,
+                StorageOwnerSessionC2SPayload::handle
+        );
+
+        registrar.playToServer(
                 StorageTakeSlotC2SPayload.TYPE,
                 StorageTakeSlotC2SPayload.STREAM_CODEC,
                 StorageTakeSlotC2SPayload::handle
