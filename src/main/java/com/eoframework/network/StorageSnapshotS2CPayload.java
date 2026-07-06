@@ -15,7 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public record StorageSnapshotS2CPayload(
-        BlockPos pos,
+        BlockPos canonicalStoragePos,
+        List<BlockPos> storagePositions,
         List<ItemStack> items,
         boolean owner
 ) implements CustomPacketPayload {
@@ -26,23 +27,32 @@ public record StorageSnapshotS2CPayload(
             new StreamCodec<>() {
                 @Override
                 public StorageSnapshotS2CPayload decode(RegistryFriendlyByteBuf buf) {
-                    BlockPos pos = BlockPos.STREAM_CODEC.decode(buf);
+                    BlockPos canonicalStoragePos = BlockPos.STREAM_CODEC.decode(buf);
+                    int posCount = buf.readVarInt();
+                    List<BlockPos> storagePositions = new ArrayList<>();
+                    for (int i = 0; i < posCount; i++) {
+                        storagePositions.add(BlockPos.STREAM_CODEC.decode(buf));
+                    }
+
                     int size = buf.readVarInt();
                     List<ItemStack> items = new ArrayList<>();
-
                     for (int i = 0; i < size; i++) {
                         items.add(ItemStack.OPTIONAL_STREAM_CODEC.decode(buf));
                     }
 
                     boolean owner = buf.readBoolean();
-                    return new StorageSnapshotS2CPayload(pos, items, owner);
+                    return new StorageSnapshotS2CPayload(canonicalStoragePos, storagePositions, items, owner);
                 }
 
                 @Override
                 public void encode(RegistryFriendlyByteBuf buf, StorageSnapshotS2CPayload payload) {
-                    BlockPos.STREAM_CODEC.encode(buf, payload.pos());
-                    buf.writeVarInt(payload.items().size());
+                    BlockPos.STREAM_CODEC.encode(buf, payload.canonicalStoragePos());
+                    buf.writeVarInt(payload.storagePositions().size());
+                    for (BlockPos pos : payload.storagePositions()) {
+                        BlockPos.STREAM_CODEC.encode(buf, pos);
+                    }
 
+                    buf.writeVarInt(payload.items().size());
                     for (ItemStack stack : payload.items()) {
                         ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, stack);
                     }
@@ -57,21 +67,13 @@ public record StorageSnapshotS2CPayload(
 
     public static void handle(StorageSnapshotS2CPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
-            ClientStorageCache.put(payload.pos(), payload.items(), payload.owner());
+            ClientStorageCache.put(payload.canonicalStoragePos(), payload.storagePositions(), payload.items(), payload.owner());
             var mc = net.minecraft.client.Minecraft.getInstance();
 
             if (mc.screen instanceof ClientLocalStorageScreen screen
-                    && screen.isForStorageLoose(payload.pos())) {
+                    && screen.isForStorageLoose(payload.canonicalStoragePos())) {
                 screen.refreshFromCache();
             }
-            /*
-            EOFramework.LOGGER.info(
-                    "[EOF Storage] client received snapshot pos={} slots={}",
-                    payload.pos(),
-                    payload.items().size()
-            );
-
-             */
         });
     }
 }

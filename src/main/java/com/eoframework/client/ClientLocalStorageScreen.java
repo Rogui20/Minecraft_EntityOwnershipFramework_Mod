@@ -3,6 +3,7 @@ package com.eoframework.client;
 import com.eoframework.network.StorageCommitC2SPayload;
 import com.eoframework.network.StorageInsertSlotC2SPayload;
 import com.eoframework.network.StorageSlotResponseC2SPayload;
+import com.eoframework.network.StorageOwnerSessionC2SPayload;
 import com.eoframework.network.StorageTakeSlotC2SPayload;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
 import net.minecraft.core.BlockPos;
@@ -29,12 +30,16 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         super(menu, playerInventory, title);
         this.storagePos = storagePos.immutable();
         this.ownerView = ownerView;
+        if (ownerView) {
+            PacketDistributor.sendToServer(new StorageOwnerSessionC2SPayload(this.storagePos, true));
+        }
     }
 
     @Override
     public void removed() {
         if (ownerView) {
             commitStorage();
+            PacketDistributor.sendToServer(new StorageOwnerSessionC2SPayload(storagePos, false));
         }
 
         super.removed();

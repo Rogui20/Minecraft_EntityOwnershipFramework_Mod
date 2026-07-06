@@ -20,22 +20,15 @@ import java.util.*;
 
 public class StorageOwnershipManager {
     private static final int SCAN_RADIUS = 8;
-    private static final int LEASE_TICKS = 100;
     private static final int SNAPSHOT_INTERVAL = 5;
 
     private static int tickCounter = 0;
-    private static final Map<GlobalPos, Lease> LEASES = new HashMap<>();
+    private static final Map<GlobalPos, StorageSession> SESSIONS = new HashMap<>();
 
     public static void tick(ServerLevel level) {
         tickCounter++;
 
         if (tickCounter % SNAPSHOT_INTERVAL != 0) return;
-
-        LEASES.entrySet().removeIf(entry -> {
-            Lease lease = entry.getValue();
-            ServerPlayer player = level.getServer().getPlayerList().getPlayer(lease.owner);
-            return player == null || lease.expiresAtGameTime < level.getGameTime();
-        });
 
         for (ServerPlayer player : level.players()) {
             scanAroundPlayer(level, player);
@@ -62,23 +55,6 @@ public class StorageOwnershipManager {
                         continue;
                     }
 
-                    Lease lease = LEASES.get(key);
-
-                    if (lease == null) {
-                        lease = new Lease(player.getUUID(), level.getGameTime() + LEASE_TICKS);
-                        LEASES.put(key, lease);
-
-                        EOFramework.LOGGER.info(
-                                "[EOF Storage] owner assigned pos={} owner={}",
-                                positions.get(0),
-                                player.getGameProfile().getName()
-                        );
-                    }
-
-                    if (lease.owner.equals(player.getUUID())) {
-                        lease.expiresAtGameTime = level.getGameTime() + LEASE_TICKS;
-                    }
-
                     List<ItemStack> items = collectStorageItems(level, positions);
                     boolean ownerView = isOwner(level, positions.get(0), player);
                     sendSnapshot(player, positions, items, ownerView);
@@ -87,10 +63,32 @@ public class StorageOwnershipManager {
         }
     }
 
-    public static boolean isOwner(ServerLevel level, BlockPos pos, ServerPlayer player) {
+    public static UUID getOwner(ServerLevel level, BlockPos pos) {
         List<BlockPos> positions = storagePositions(level, pos);
-        Lease lease = LEASES.get(GlobalPos.of(level.dimension(), positions.get(0)));
-        return lease != null && lease.owner.equals(player.getUUID());
+        BlockPos canonical = positions.get(0);
+        StorageSession session = SESSIONS.get(GlobalPos.of(level.dimension(), canonical));
+
+        if (session != null && session.openByOwner) {
+            ServerPlayer pinnedOwner = level.getServer().getPlayerList().getPlayer(session.owner);
+            if (pinnedOwner != null) {
+                return session.owner;
+            }
+        }
+
+        return ChunkOwnershipManager.getOwner(level, canonical);
+    }
+
+    public static boolean isOwner(ServerLevel level, BlockPos pos, ServerPlayer player) {
+        UUID owner = getOwner(level, pos);
+        if (owner == null) {
+            owner = ChunkOwnershipManager.getOrAssignOwner(level, storagePositions(level, pos).get(0), player);
+        }
+        return player.getUUID().equals(owner);
+    }
+
+    private static StorageSession sessionFor(ServerLevel level, BlockPos clickedPos) {
+        List<BlockPos> positions = storagePositions(level, clickedPos);
+        return SESSIONS.get(GlobalPos.of(level.dimension(), positions.get(0)));
     }
 
     private static void broadcastSnapshotToNearbyExcept(
@@ -165,10 +163,10 @@ public class StorageOwnershipManager {
     public static void release(ServerLevel level, BlockPos pos, ServerPlayer player) {
         List<BlockPos> positions = storagePositions(level, pos);
         GlobalPos key = GlobalPos.of(level.dimension(), positions.get(0));
-        Lease lease = LEASES.get(key);
+        StorageSession session = SESSIONS.get(key);
 
-        if (lease != null && lease.owner.equals(player.getUUID())) {
-            LEASES.remove(key);
+        if (session != null && session.owner.equals(player.getUUID())) {
+            session.openByOwner = false;
         }
     }
 
@@ -207,13 +205,13 @@ public class StorageOwnershipManager {
             return List.of(pos.immutable());
         }
 
-        ChestType type = state.getValue(ChestBlock.TYPE);
-
-        if (type == ChestType.RIGHT) {
-            return List.of(pos.immutable(), other.immutable());
-        }
-
-        return List.of(other.immutable(), pos.immutable());
+        List<BlockPos> positions = new ArrayList<>();
+        positions.add(pos.immutable());
+        positions.add(other.immutable());
+        positions.sort(Comparator.<BlockPos>comparingInt(BlockPos::getX)
+                .thenComparingInt(BlockPos::getY)
+                .thenComparingInt(BlockPos::getZ));
+        return List.copyOf(positions);
     }
 
     private static BlockPos findConnectedChestPos(ServerLevel level, BlockPos pos, BlockState state) {
@@ -255,7 +253,7 @@ public class StorageOwnershipManager {
         for (BlockPos pos : positions) {
             PacketDistributor.sendToPlayer(
                     player,
-                    new StorageSnapshotS2CPayload(pos, items, owner)
+                    new StorageSnapshotS2CPayload(positions.get(0), positions, items, owner)
             );
         }
     }
@@ -311,20 +309,21 @@ public class StorageOwnershipManager {
     public static boolean takeSlotForNonOwner(ServerLevel level, BlockPos clickedPos, ServerPlayer requester, int slot, boolean quickMove) {
         List<BlockPos> positions = storagePositions(level, clickedPos);
         GlobalPos key = GlobalPos.of(level.dimension(), positions.get(0));
-        Lease lease = LEASES.get(key);
+        StorageSession session = SESSIONS.get(key);
 
-        if (lease == null) {
+        UUID ownerUuid = getOwner(level, clickedPos);
+        if (ownerUuid == null) {
             List<ItemStack> fresh = collectStorageItems(level, positions);
             sendSnapshot(requester, positions, fresh, isOwner(level, clickedPos, requester));
             return false;
         }
 
-        if (lease.owner.equals(requester.getUUID())) {
+        if (ownerUuid.equals(requester.getUUID())) {
             return false;
         }
 
-        ServerPlayer owner = level.getServer().getPlayerList().getPlayer(lease.owner);
-        if (owner == null || !lease.openByOwner) {
+        ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerUuid);
+        if (owner == null || session == null || !session.openByOwner) {
             return takeSlotDirectlyForNonOwner(level, clickedPos, requester, slot, quickMove);
         }
 
@@ -411,20 +410,31 @@ public class StorageOwnershipManager {
 
     public static void setOwnerOpen(ServerLevel level, BlockPos pos, ServerPlayer player, boolean open) {
         List<BlockPos> positions = storagePositions(level, pos);
-        Lease lease = LEASES.get(GlobalPos.of(level.dimension(), positions.get(0)));
+        GlobalPos key = GlobalPos.of(level.dimension(), positions.get(0));
 
-        if (lease != null && lease.owner.equals(player.getUUID())) {
-            lease.openByOwner = open;
+        if (open) {
+            if (isOwner(level, pos, player)) {
+                StorageSession session = SESSIONS.computeIfAbsent(key, ignored -> new StorageSession(player.getUUID()));
+                session.owner = player.getUUID();
+                session.openByOwner = true;
+            }
+            return;
+        }
+
+        StorageSession session = SESSIONS.get(key);
+        if (session != null && session.owner.equals(player.getUUID())) {
+            session.openByOwner = false;
+            SESSIONS.remove(key);
         }
     }
 
     private static boolean isLockedByOwner(ServerLevel level, BlockPos pos, ServerPlayer requester) {
         List<BlockPos> positions = storagePositions(level, pos);
-        Lease lease = LEASES.get(GlobalPos.of(level.dimension(), positions.get(0)));
+        StorageSession session = SESSIONS.get(GlobalPos.of(level.dimension(), positions.get(0)));
 
-        return lease != null
-                && lease.openByOwner
-                && !lease.owner.equals(requester.getUUID());
+        return session != null
+                && session.openByOwner
+                && !session.owner.equals(requester.getUUID());
     }
 
     private static void removeFromPlayerInventory(ServerPlayer player, ItemStack stack, int count) {
@@ -564,17 +574,18 @@ public class StorageOwnershipManager {
 
         List<BlockPos> positions = storagePositions(level, clickedPos);
         GlobalPos key = GlobalPos.of(level.dimension(), positions.get(0));
-        Lease lease = LEASES.get(key);
+        StorageSession session = SESSIONS.get(key);
 
-        if (lease != null && lease.owner.equals(requester.getUUID())) {
+        UUID ownerUuid = getOwner(level, clickedPos);
+        if (ownerUuid != null && ownerUuid.equals(requester.getUUID())) {
             return false;
         }
 
-        ServerPlayer owner = lease == null ? null : level.getServer().getPlayerList().getPlayer(lease.owner);
+        ServerPlayer owner = ownerUuid == null ? null : level.getServer().getPlayerList().getPlayer(ownerUuid);
 
         // Etapa atual: se owner estiver com menu aberto, por segurança nega insert.
         // Depois podemos criar request de insert para o owner validar localmente.
-        if (owner != null && lease.openByOwner) {
+        if (owner != null && session.openByOwner) {
             List<ItemStack> fresh = collectStorageItems(level, positions);
             sendSnapshot(requester, positions, fresh, false);
 
@@ -667,14 +678,12 @@ public class StorageOwnershipManager {
         return false;
     }
 
-    private static class Lease {
-        final UUID owner;
-        long expiresAtGameTime;
+    private static class StorageSession {
+        UUID owner;
         boolean openByOwner;
 
-        Lease(UUID owner, long expiresAtGameTime) {
+        StorageSession(UUID owner) {
             this.owner = owner;
-            this.expiresAtGameTime = expiresAtGameTime;
         }
     }
 }
