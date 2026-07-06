@@ -48,7 +48,7 @@ public class ClientOwnedBlockRuntime {
 
         UUID owner = getKnownCellOwner(pos);
         if (owner == null) {
-            return true;
+            return mc.hasSingleplayerServer();
         }
 
         return owner.equals(mc.player.getUUID());
@@ -70,7 +70,8 @@ public class ClientOwnedBlockRuntime {
         Minecraft mc = Minecraft.getInstance();
         UUID playerUuid = mc.player != null ? mc.player.getUUID() : null;
         UUID owner = getKnownCellOwner(pos);
-        boolean isOwner = mc.player != null && mc.level != null && (owner == null || owner.equals(playerUuid));
+        boolean isOwner = mc.player != null && mc.level != null
+                && (owner != null ? owner.equals(playerUuid) : mc.hasSingleplayerServer());
 
         EOFramework.LOGGER.info(
                 "[EOF BlockBreak] method={} action={} pos={} knownOwner={} player={} isOwner={}",
@@ -85,6 +86,11 @@ public class ClientOwnedBlockRuntime {
 
     public static void setCellOwner(int cellX, int cellY, int cellZ, UUID owner) {
         CELL_OWNERS.put(new CellKey(cellX, cellY, cellZ), owner);
+    }
+
+    public static void setCellOwner(BlockPos pos, UUID owner) {
+        CELL_OWNERS.put(CellKey.from(pos), owner);
+        EOFramework.LOGGER.info("[EOF BlockOwnerSync] pos={} owner={}", pos, owner);
     }
 
     public static void requestPlace(BlockPos pos, Direction face, ItemStack stack) {

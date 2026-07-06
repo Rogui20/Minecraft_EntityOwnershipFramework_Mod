@@ -50,8 +50,11 @@ public record BlockBreakRequestC2SPayload(
             if (!level.hasChunkAt(pos)) return;
             if (level.isEmptyBlock(pos)) return;
 
+            UUID existingOwnerUuid = BlockOwnershipManager.getOwner(level, pos);
             UUID ownerUuid = BlockOwnershipManager.getOrAssignOwner(level, pos, player);
             boolean requesterIsOwner = ownerUuid.equals(player.getUUID());
+
+            PacketDistributor.sendToPlayer(player, new BlockOwnerSyncS2CPayload(pos, ownerUuid));
 
             EOFramework.LOGGER.info(
                     "[EOF BlockBreakRequest] pos={} owner={} requester={} requesterIsOwner={} clientSpawnedDrops={}",
@@ -61,6 +64,15 @@ public record BlockBreakRequestC2SPayload(
                     requesterIsOwner,
                     payload.clientSpawnedDrops()
             );
+
+            if (existingOwnerUuid == null) {
+                EOFramework.LOGGER.info(
+                        "[EOF BlockBreakRequest] assigned owner pos={} owner={} requester={}",
+                        pos,
+                        ownerUuid,
+                        player.getUUID()
+                );
+            }
 
             if (!requesterIsOwner && player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D) > 8.0D * 8.0D) {
                 EOFramework.LOGGER.info(
@@ -87,6 +99,7 @@ public record BlockBreakRequestC2SPayload(
                 ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerUuid);
 
                 if (owner != null) {
+                    PacketDistributor.sendToPlayer(owner, new BlockOwnerSyncS2CPayload(pos, ownerUuid));
                     EOFramework.LOGGER.info(
                             "[EOF BlockBreakRequest] forwarding to owner pos={} owner={} requester={} clientSpawnedDrops={}",
                             pos,

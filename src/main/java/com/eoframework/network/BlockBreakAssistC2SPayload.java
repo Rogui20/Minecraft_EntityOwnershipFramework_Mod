@@ -38,7 +38,10 @@ public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active) implement
             if (!level.hasChunkAt(pos)) return;
             if (level.isEmptyBlock(pos) && payload.active()) return;
 
+            var existingOwnerUuid = BlockOwnershipManager.getOwner(level, pos);
             var ownerUuid = BlockOwnershipManager.getOrAssignOwner(level, pos, player);
+            PacketDistributor.sendToPlayer(player, new BlockOwnerSyncS2CPayload(pos, ownerUuid));
+
             EOFramework.LOGGER.info(
                     "[EOF BlockBreakAssist] pos={} owner={} requester={} active={}",
                     pos,
@@ -46,6 +49,15 @@ public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active) implement
                     player.getUUID(),
                     payload.active()
             );
+
+            if (existingOwnerUuid == null) {
+                EOFramework.LOGGER.info(
+                        "[EOF BlockBreakAssist] assigned owner pos={} owner={} requester={}",
+                        pos,
+                        ownerUuid,
+                        player.getUUID()
+                );
+            }
 
             if (ownerUuid.equals(player.getUUID())) return;
 
