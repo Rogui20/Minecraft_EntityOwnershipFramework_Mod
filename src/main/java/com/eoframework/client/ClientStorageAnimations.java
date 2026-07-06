@@ -36,6 +36,7 @@ public class ClientStorageAnimations {
             if (state.getBlock() instanceof BarrelBlock) {
                 setBarrelOpen(p, state, true);
                 playBarrelSound(p, state, SoundEvents.BARREL_OPEN);
+                ClientStorageAnimationSuppressor.suppress(p, mc.level.getGameTime(), 20);
                 LOCALLY_OPENED.add(p.immutable());
             }
         }
@@ -60,6 +61,7 @@ public class ClientStorageAnimations {
             if (state.getBlock() instanceof BarrelBlock) {
                 setBarrelOpen(p, state, false);
                 playBarrelSound(p, state, SoundEvents.BARREL_CLOSE);
+                ClientStorageAnimationSuppressor.suppress(p, mc.level.getGameTime(), 20);
             }
         }
 

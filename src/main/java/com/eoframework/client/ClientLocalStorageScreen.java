@@ -67,6 +67,10 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         int storageSlots = this.menu.getRowCount() * 9;
 
         if (ownerView) {
+            ItemStack before = slotId >= 0 && slotId < storageSlots
+                    ? this.menu.getSlot(slotId).getItem().copy()
+                    : ItemStack.EMPTY;
+            System.out.println("[EOF Storage] owner clicked same slot current slot=" + slotId + " current=" + before);
             super.slotClicked(slot, slotId, mouseButton, type);
             commitStorage();
             return;
@@ -84,6 +88,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 );
 
                 refreshFromCache();
+                System.out.println("[EOF Storage] non-owner click canceled local slot=" + slotId + " insert=true");
                 return;
             }
 
@@ -93,7 +98,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
             this.menu.setCarried(ItemStack.EMPTY);
             refreshFromCache();
-            System.out.println("[EOF Storage] non-owner request slot=" + slotId + " quick=" + (type == ClickType.QUICK_MOVE));
+            System.out.println("[EOF Storage] non-owner click canceled local slot=" + slotId + " quick=" + (type == ClickType.QUICK_MOVE));
             return;
         }
 
@@ -145,8 +150,10 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         }
 
         ItemStack current = this.menu.getSlot(slotId).getItem();
+        System.out.println("[EOF Storage] owner current slot before approve=" + slotId + " current=" + current);
 
         if (current.isEmpty()) {
+            System.out.println("[EOF Storage] owner approved/denied slot=" + slotId + " accepted=false");
             PacketDistributor.sendToServer(new StorageSlotResponseC2SPayload(
                     requester,
                     storagePos,
@@ -163,10 +170,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
         commitStorage();
 
-        System.out.println("[EOF Storage] owner approving requester="
-                + requester
-                + " slot=" + slotId
-                + " taken=" + taken);
+        System.out.println("[EOF Storage] owner approved/denied slot=" + slotId + " accepted=true taken=" + taken + " requester=" + requester);
 
         PacketDistributor.sendToServer(new StorageSlotResponseC2SPayload(
                 requester,
@@ -205,7 +209,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
     }
 
     public void handleValidatedTakeResult(boolean accepted, boolean quickMove, ItemStack stack) {
-        System.out.println("[EOF Storage] validated take accepted="
+        System.out.println("[EOF Storage] requester received result accepted="
                 + accepted
                 + " quick=" + quickMove
                 + " stack=" + stack);
