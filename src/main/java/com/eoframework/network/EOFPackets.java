@@ -93,9 +93,9 @@ public class EOFPackets {
         );
 
         registrar.playToClient(
-                BlockOwnerSyncS2CPayload.TYPE,
-                BlockOwnerSyncS2CPayload.STREAM_CODEC,
-                BlockOwnerSyncS2CPayload::handle
+                ChunkOwnerSyncS2CPayload.TYPE,
+                ChunkOwnerSyncS2CPayload.STREAM_CODEC,
+                ChunkOwnerSyncS2CPayload::handle
         );
 
 

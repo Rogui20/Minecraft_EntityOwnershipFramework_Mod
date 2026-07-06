@@ -16,8 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public class ClientOwnedBlockRuntime {
-    private static final int CELL_SIZE = 16;
-    private static final Map<CellKey, UUID> CELL_OWNERS = new HashMap<>();
+    private static final Map<ChunkKey, UUID> CHUNK_OWNERS = new HashMap<>();
     private static final Map<BlockPos, Long> BREAK_ECHO_SUPPRESS = new HashMap<>();
 
     public static void suppressBreakEcho(BlockPos pos, int ticks) {
@@ -47,15 +46,13 @@ public class ClientOwnedBlockRuntime {
         if (mc.player == null || mc.level == null) return false;
 
         UUID owner = getKnownCellOwner(pos);
-        if (owner == null) {
-            return mc.hasSingleplayerServer();
-        }
-
-        return owner.equals(mc.player.getUUID());
+        return owner != null && owner.equals(mc.player.getUUID());
     }
 
     public static UUID getKnownCellOwner(BlockPos pos) {
-        return CELL_OWNERS.get(CellKey.from(pos));
+        Minecraft mc = Minecraft.getInstance();
+        String dimension = mc.level != null ? mc.level.dimension().location().toString() : null;
+        return CHUNK_OWNERS.get(ChunkKey.from(dimension, pos));
     }
 
     public static boolean isKnownCellOwnedByMe(BlockPos pos) {
@@ -71,7 +68,7 @@ public class ClientOwnedBlockRuntime {
         UUID playerUuid = mc.player != null ? mc.player.getUUID() : null;
         UUID owner = getKnownCellOwner(pos);
         boolean isOwner = mc.player != null && mc.level != null
-                && (owner != null ? owner.equals(playerUuid) : mc.hasSingleplayerServer());
+                && owner != null && owner.equals(playerUuid);
 
         EOFramework.LOGGER.info(
                 "[EOF BlockBreak] method={} action={} pos={} knownOwner={} player={} isOwner={}",
@@ -85,12 +82,21 @@ public class ClientOwnedBlockRuntime {
     }
 
     public static void setCellOwner(int cellX, int cellY, int cellZ, UUID owner) {
-        CELL_OWNERS.put(new CellKey(cellX, cellY, cellZ), owner);
+        setChunkOwner(currentDimension(), cellX, cellZ, owner);
     }
 
     public static void setCellOwner(BlockPos pos, UUID owner) {
-        CELL_OWNERS.put(CellKey.from(pos), owner);
-        EOFramework.LOGGER.info("[EOF BlockOwnerSync] pos={} owner={}", pos, owner);
+        setChunkOwner(currentDimension(), Math.floorDiv(pos.getX(), 16), Math.floorDiv(pos.getZ(), 16), owner);
+    }
+
+    public static void setChunkOwner(String dimension, int chunkX, int chunkZ, UUID owner) {
+        ChunkKey key = new ChunkKey(dimension, chunkX, chunkZ);
+        if (owner == null) {
+            CHUNK_OWNERS.remove(key);
+        } else {
+            CHUNK_OWNERS.put(key, owner);
+        }
+        EOFramework.LOGGER.info("[EOF ChunkOwnerSync] dimension={} chunk=({}, {}) owner={}", dimension, chunkX, chunkZ, owner);
     }
 
     public static void requestPlace(BlockPos pos, Direction face, ItemStack stack) {
@@ -150,13 +156,14 @@ public class ClientOwnedBlockRuntime {
         return true;
     }
 
-    private record CellKey(int x, int y, int z) {
-        static CellKey from(BlockPos pos) {
-            return new CellKey(
-                    Math.floorDiv(pos.getX(), CELL_SIZE),
-                    Math.floorDiv(pos.getY(), CELL_SIZE),
-                    Math.floorDiv(pos.getZ(), CELL_SIZE)
-            );
+    private static String currentDimension() {
+        Minecraft mc = Minecraft.getInstance();
+        return mc.level != null ? mc.level.dimension().location().toString() : null;
+    }
+
+    private record ChunkKey(String dimension, int x, int z) {
+        static ChunkKey from(String dimension, BlockPos pos) {
+            return new ChunkKey(dimension, Math.floorDiv(pos.getX(), 16), Math.floorDiv(pos.getZ(), 16));
         }
     }
 
