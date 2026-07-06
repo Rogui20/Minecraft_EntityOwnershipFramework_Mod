@@ -92,6 +92,12 @@ public class EOFPackets {
                 BlockBreakOwnerRequestS2CPayload::handle
         );
 
+        registrar.playToClient(
+                BlockOwnerSyncS2CPayload.TYPE,
+                BlockOwnerSyncS2CPayload.STREAM_CODEC,
+                BlockOwnerSyncS2CPayload::handle
+        );
+
 
         registrar.playToServer(
                 BlockBreakAssistC2SPayload.TYPE,

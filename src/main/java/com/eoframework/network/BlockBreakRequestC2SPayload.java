@@ -48,15 +48,65 @@ public record BlockBreakRequestC2SPayload(
             BlockPos pos = payload.pos();
 
             if (!level.hasChunkAt(pos)) return;
-            if (player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D) > 8.0D * 8.0D) return;
             if (level.isEmptyBlock(pos)) return;
 
+            UUID existingOwnerUuid = BlockOwnershipManager.getOwner(level, pos);
             UUID ownerUuid = BlockOwnershipManager.getOrAssignOwner(level, pos, player);
+            boolean requesterIsOwner = ownerUuid.equals(player.getUUID());
 
-            if (!ownerUuid.equals(player.getUUID())) {
+            PacketDistributor.sendToPlayer(player, new BlockOwnerSyncS2CPayload(pos, ownerUuid));
+
+            EOFramework.LOGGER.info(
+                    "[EOF BlockBreakRequest] pos={} owner={} requester={} requesterIsOwner={} clientSpawnedDrops={}",
+                    pos,
+                    ownerUuid,
+                    player.getUUID(),
+                    requesterIsOwner,
+                    payload.clientSpawnedDrops()
+            );
+
+            if (existingOwnerUuid == null) {
+                EOFramework.LOGGER.info(
+                        "[EOF BlockBreakRequest] assigned owner pos={} owner={} requester={}",
+                        pos,
+                        ownerUuid,
+                        player.getUUID()
+                );
+            }
+
+            if (!requesterIsOwner && player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D) > 8.0D * 8.0D) {
+                EOFramework.LOGGER.info(
+                        "[EOF BlockBreakRequest] reject non-owner requester too far pos={} owner={} requester={}",
+                        pos,
+                        ownerUuid,
+                        player.getUUID()
+                );
+                return;
+            }
+
+            if (requesterIsOwner && !payload.clientSpawnedDrops()
+                    && player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D) > 8.0D * 8.0D) {
+                EOFramework.LOGGER.info(
+                        "[EOF BlockBreakRequest] reject owner physical break too far pos={} owner={} requester={}",
+                        pos,
+                        ownerUuid,
+                        player.getUUID()
+                );
+                return;
+            }
+
+            if (!requesterIsOwner) {
                 ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerUuid);
 
                 if (owner != null) {
+                    PacketDistributor.sendToPlayer(owner, new BlockOwnerSyncS2CPayload(pos, ownerUuid));
+                    EOFramework.LOGGER.info(
+                            "[EOF BlockBreakRequest] forwarding to owner pos={} owner={} requester={} clientSpawnedDrops={}",
+                            pos,
+                            ownerUuid,
+                            player.getUUID(),
+                            payload.clientSpawnedDrops()
+                    );
                     PacketDistributor.sendToPlayer(
                             owner,
                             new BlockBreakOwnerRequestS2CPayload(
@@ -64,6 +114,13 @@ public record BlockBreakRequestC2SPayload(
                                     pos,
                                     payload.clientSpawnedDrops()
                             )
+                    );
+                } else {
+                    EOFramework.LOGGER.info(
+                            "[EOF BlockBreakRequest] owner offline/invalid for pos={} owner={} requester={}",
+                            pos,
+                            ownerUuid,
+                            player.getUUID()
                     );
                 }
 

@@ -161,13 +161,13 @@ public abstract class MultiPlayerGameModeMixin {
             return;
         }
         ClientOwnedBlockRuntime.suppressBreakEcho(pos, 100);
-        ClientOwnedBlockRuntime.spawnOwnerDrops(
+        boolean spawnedDrops = ClientOwnedBlockRuntime.spawnOwnerDrops(
                 eof$pendingOwnerBreakPos,
                 eof$pendingOwnerBreakState,
                 eof$pendingOwnerBreakTool
         );
 
-        ClientOwnedBlockRuntime.notifyOwnerBreakWithClientDrops(eof$pendingOwnerBreakPos);
+        ClientOwnedBlockRuntime.notifyOwnerBreakWithClientDrops(eof$pendingOwnerBreakPos, spawnedDrops);
 
         eof$clearPendingBreak();
     }
