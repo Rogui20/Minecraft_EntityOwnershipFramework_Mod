@@ -68,6 +68,12 @@ public record StorageSnapshotS2CPayload(
     public static void handle(StorageSnapshotS2CPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             ClientStorageCache.put(payload.canonicalStoragePos(), payload.storagePositions(), payload.items(), payload.owner());
+            EOFramework.LOGGER.info(
+                    "[EOF StorageSnapshot] received canonicalPos={} ownerView={} slots={}",
+                    payload.canonicalStoragePos(),
+                    payload.owner(),
+                    payload.items().size()
+            );
             var mc = net.minecraft.client.Minecraft.getInstance();
 
             if (mc.screen instanceof ClientLocalStorageScreen screen
