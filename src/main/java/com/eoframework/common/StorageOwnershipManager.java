@@ -151,6 +151,11 @@ public class StorageOwnershipManager {
         broadcastSnapshotToNearbyExcept(level, clickedPos, positions, fresh, player.getUUID());
 
         EOFramework.LOGGER.info(
+                "[EOF StorageCommit] canonical={} firstNonEmptyIndexes={}",
+                positions.get(0),
+                firstNonEmptyIndexes(items)
+        );
+        EOFramework.LOGGER.info(
                 "[EOF Storage] commit applied pos={} slots={} player={}",
                 clickedPos,
                 items.size(),
@@ -205,13 +210,21 @@ public class StorageOwnershipManager {
             return List.of(pos.immutable());
         }
 
-        List<BlockPos> positions = new ArrayList<>();
-        positions.add(pos.immutable());
-        positions.add(other.immutable());
-        positions.sort(Comparator.<BlockPos>comparingInt(BlockPos::getX)
-                .thenComparingInt(BlockPos::getY)
-                .thenComparingInt(BlockPos::getZ));
-        return List.copyOf(positions);
+        BlockPos first = state.getValue(ChestBlock.TYPE) == ChestType.RIGHT ? pos.immutable() : other.immutable();
+        BlockPos second = state.getValue(ChestBlock.TYPE) == ChestType.RIGHT ? other.immutable() : pos.immutable();
+        List<BlockPos> positions = List.of(first, second);
+
+        EOFramework.LOGGER.info(
+                "[EOF StorageOrder] clickedPos={} canonical={} positions={} chestTypes=[{},{}] facing={}",
+                pos,
+                first,
+                positions,
+                level.getBlockState(first).getValue(ChestBlock.TYPE),
+                level.getBlockState(second).getValue(ChestBlock.TYPE),
+                state.getValue(ChestBlock.FACING)
+        );
+
+        return positions;
     }
 
     private static BlockPos findConnectedChestPos(ServerLevel level, BlockPos pos, BlockState state) {
@@ -250,12 +263,26 @@ public class StorageOwnershipManager {
     }
 
     private static void sendSnapshot(ServerPlayer player, List<BlockPos> positions, List<ItemStack> items, boolean owner) {
-        for (BlockPos pos : positions) {
-            PacketDistributor.sendToPlayer(
-                    player,
-                    new StorageSnapshotS2CPayload(positions.get(0), positions, items, owner)
-            );
+        EOFramework.LOGGER.info(
+                "[EOF StorageSnapshot] canonical={} slots={} firstNonEmptyIndexes={}",
+                positions.get(0),
+                items.size(),
+                firstNonEmptyIndexes(items)
+        );
+        PacketDistributor.sendToPlayer(
+                player,
+                new StorageSnapshotS2CPayload(positions.get(0), positions, items, owner)
+        );
+    }
+
+    private static List<Integer> firstNonEmptyIndexes(List<ItemStack> items) {
+        List<Integer> indexes = new ArrayList<>();
+        for (int i = 0; i < items.size() && indexes.size() < 12; i++) {
+            if (!items.get(i).isEmpty()) {
+                indexes.add(i);
+            }
         }
+        return indexes;
     }
 
     private static boolean takeSlotDirectlyForNonOwner(
