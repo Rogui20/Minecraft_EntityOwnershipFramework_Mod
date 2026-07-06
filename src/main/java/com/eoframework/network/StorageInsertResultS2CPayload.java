@@ -42,6 +42,9 @@ public record StorageInsertResultS2CPayload(
         context.enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
 
+            System.out.println("[EOF StorageResult] requester applying insert result accepted="
+                    + payload.accepted() + " inserted=" + payload.insertedCount());
+
             if (mc.screen instanceof ClientLocalStorageScreen screen) {
                 screen.handleValidatedInsertResult(
                         payload.accepted(),

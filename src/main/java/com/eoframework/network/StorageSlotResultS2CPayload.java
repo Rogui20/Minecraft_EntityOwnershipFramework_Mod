@@ -45,7 +45,7 @@ public record StorageSlotResultS2CPayload(
     public static void handle(StorageSlotResultS2CPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
-            System.out.println("[EOF Storage] requester received result accepted="
+            System.out.println("[EOF StorageResult] requester applying result accepted="
                     + payload.accepted() + " stack=" + payload.stack());
             if (mc.screen instanceof ClientLocalStorageScreen screen) {
                 screen.handleValidatedTakeResult(

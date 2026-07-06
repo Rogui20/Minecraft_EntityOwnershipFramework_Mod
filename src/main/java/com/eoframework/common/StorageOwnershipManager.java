@@ -285,6 +285,25 @@ public class StorageOwnershipManager {
         return indexes;
     }
 
+    private static void sendTakeResult(ServerPlayer requester, boolean accepted, boolean quickMove, ItemStack stack) {
+        PacketDistributor.sendToPlayer(
+                requester,
+                new com.eoframework.network.StorageSlotResultS2CPayload(
+                        accepted,
+                        quickMove,
+                        stack.copy()
+                )
+        );
+
+        EOFramework.LOGGER.info(
+                "[EOF StorageTake] server validated accepted={} quickMove={} stack={} requester={}",
+                accepted,
+                quickMove,
+                stack,
+                requester.getGameProfile().getName()
+        );
+    }
+
     private static boolean takeSlotDirectlyForNonOwner(
             ServerLevel level,
             BlockPos clickedPos,
@@ -293,6 +312,14 @@ public class StorageOwnershipManager {
             boolean quickMove
     ) {
         List<BlockPos> positions = storagePositions(level, clickedPos);
+        int totalSlots = collectStorageItems(level, positions).size();
+
+        if (slot < 0 || slot >= totalSlots || isOwner(level, clickedPos, requester)) {
+            List<ItemStack> fresh = collectStorageItems(level, positions);
+            sendSnapshot(requester, positions, fresh, isOwner(level, clickedPos, requester));
+            sendTakeResult(requester, false, quickMove, ItemStack.EMPTY);
+            return false;
+        }
 
         int index = slot;
 
@@ -302,27 +329,26 @@ public class StorageOwnershipManager {
 
             if (index < container.getContainerSize()) {
                 ItemStack stack = container.getItem(index);
-                if (stack.isEmpty()) return false;
+                if (stack.isEmpty()) {
+                    List<ItemStack> fresh = collectStorageItems(level, positions);
+                    sendSnapshot(requester, positions, fresh, false);
+                    sendTakeResult(requester, false, quickMove, ItemStack.EMPTY);
+                    return false;
+                }
 
                 ItemStack taken = stack.copy();
                 container.setItem(index, ItemStack.EMPTY);
                 container.setChanged();
 
-                if (!requester.getInventory().add(taken.copy())) {
+                if (quickMove && !requester.getInventory().add(taken.copy())) {
                     requester.drop(taken.copy(), false);
                 }
+                requester.getInventory().setChanged();
+                requester.containerMenu.broadcastChanges();
 
                 List<ItemStack> fresh = collectStorageItems(level, positions);
                 broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
-
-                PacketDistributor.sendToPlayer(
-                        requester,
-                        new com.eoframework.network.StorageSlotResultS2CPayload(
-                                true,
-                                quickMove,
-                                taken.copy()
-                        )
-                );
+                sendTakeResult(requester, true, quickMove, taken);
 
                 return true;
             }
@@ -330,49 +356,12 @@ public class StorageOwnershipManager {
             index -= container.getContainerSize();
         }
 
+        sendTakeResult(requester, false, quickMove, ItemStack.EMPTY);
         return false;
     }
 
     public static boolean takeSlotForNonOwner(ServerLevel level, BlockPos clickedPos, ServerPlayer requester, int slot, boolean quickMove) {
-        List<BlockPos> positions = storagePositions(level, clickedPos);
-        GlobalPos key = GlobalPos.of(level.dimension(), positions.get(0));
-        StorageSession session = SESSIONS.get(key);
-
-        UUID ownerUuid = getOwner(level, clickedPos);
-        if (ownerUuid == null) {
-            List<ItemStack> fresh = collectStorageItems(level, positions);
-            sendSnapshot(requester, positions, fresh, isOwner(level, clickedPos, requester));
-            return false;
-        }
-
-        if (ownerUuid.equals(requester.getUUID())) {
-            return false;
-        }
-
-        ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerUuid);
-        if (owner == null || session == null || !session.openByOwner) {
-            return takeSlotDirectlyForNonOwner(level, clickedPos, requester, slot, quickMove);
-        }
-
-        PacketDistributor.sendToPlayer(
-                owner,
-                new com.eoframework.network.StorageSlotRequestS2CPayload(
-                        requester.getUUID(),
-                        clickedPos.immutable(),
-                        slot,
-                        quickMove
-                )
-        );
-
-        EOFramework.LOGGER.info(
-                "[EOF Storage] request forwarded to owner slot={} pos={} requester={} owner={}",
-                slot,
-                clickedPos,
-                requester.getGameProfile().getName(),
-                owner.getGameProfile().getName()
-        );
-
-        return true;
+        return takeSlotDirectlyForNonOwner(level, clickedPos, requester, slot, quickMove);
     }
 
     public static void applyOwnerSlotResponse(
@@ -508,7 +497,8 @@ public class StorageOwnershipManager {
                     globalSlot,
                     sourceSlot,
                     storageSlots,
-                    offered
+                    offered,
+                    false
             )) {
                 return true;
             }
@@ -593,35 +583,37 @@ public class StorageOwnershipManager {
             int storageSlots,
             ItemStack offered
     ) {
+        return insertSlotForNonOwner(level, clickedPos, requester, slot, sourceSlot, storageSlots, offered, true);
+    }
+
+    private static boolean insertSlotForNonOwner(
+            ServerLevel level,
+            BlockPos clickedPos,
+            ServerPlayer requester,
+            int slot,
+            int sourceSlot,
+            int storageSlots,
+            ItemStack offered,
+            boolean notifyFailure
+    ) {
         if (offered.isEmpty()) {
-            PacketDistributor.sendToPlayer(
-                    requester,
-                    new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
-            );
+            if (notifyFailure) {
+                PacketDistributor.sendToPlayer(
+                        requester,
+                        new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
+                );
+            }
             return false;
         }
 
         List<BlockPos> positions = storagePositions(level, clickedPos);
-        GlobalPos key = GlobalPos.of(level.dimension(), positions.get(0));
-        StorageSession session = SESSIONS.get(key);
-
-        UUID ownerUuid = getOwner(level, clickedPos);
-        if (ownerUuid != null && ownerUuid.equals(requester.getUUID())) {
-            return false;
-        }
-
-        ServerPlayer owner = ownerUuid == null ? null : level.getServer().getPlayerList().getPlayer(ownerUuid);
-
-        // Etapa atual: se owner estiver com menu aberto, por segurança nega insert.
-        // Depois podemos criar request de insert para o owner validar localmente.
-        if (owner != null && session.openByOwner) {
-            List<ItemStack> fresh = collectStorageItems(level, positions);
-            sendSnapshot(requester, positions, fresh, false);
-
-            PacketDistributor.sendToPlayer(
-                    requester,
-                    new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
-            );
+        if (isOwner(level, clickedPos, requester)) {
+            if (notifyFailure) {
+                PacketDistributor.sendToPlayer(
+                        requester,
+                        new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
+                );
+            }
             return false;
         }
 
@@ -666,15 +658,25 @@ public class StorageOwnershipManager {
                 }
 
                 if (inserted <= 0) {
-                    PacketDistributor.sendToPlayer(
-                            requester,
-                            new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
-                    );
+                    if (notifyFailure) {
+                        PacketDistributor.sendToPlayer(
+                                requester,
+                                new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
+                        );
+                    }
                     return false;
                 }
 
                 container.setChanged();
-                removeFromPlayerInventorySlot(requester, sourceSlot, storageSlots, offered, inserted);
+                if (sourceSlot < 0) {
+                    ItemStack carried = requester.containerMenu.getCarried();
+                    if (!carried.isEmpty() && ItemStack.isSameItemSameComponents(carried, offered)) {
+                        carried.shrink(inserted);
+                        requester.containerMenu.setCarried(carried.isEmpty() ? ItemStack.EMPTY : carried);
+                    }
+                } else {
+                    removeFromPlayerInventorySlot(requester, sourceSlot, storageSlots, offered, inserted);
+                }
 
                 List<ItemStack> fresh = collectStorageItems(level, positions);
                 broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
@@ -685,7 +687,7 @@ public class StorageOwnershipManager {
                 );
 
                 EOFramework.LOGGER.info(
-                        "[EOF Storage] non-owner inserted item={} count={} pos={} slot={} player={}",
+                        "[EOF StorageInsert] server validated accepted=true item={} count={} pos={} slot={} player={}",
                         offered,
                         inserted,
                         clickedPos,
@@ -699,10 +701,12 @@ public class StorageOwnershipManager {
             index -= container.getContainerSize();
         }
 
-        PacketDistributor.sendToPlayer(
-                requester,
-                new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
-        );
+        if (notifyFailure) {
+            PacketDistributor.sendToPlayer(
+                    requester,
+                    new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
+            );
+        }
 
         return false;
     }

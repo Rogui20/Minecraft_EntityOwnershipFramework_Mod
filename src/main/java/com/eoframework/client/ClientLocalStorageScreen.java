@@ -88,7 +88,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 );
 
                 refreshFromCache();
-                System.out.println("[EOF Storage] non-owner click canceled local slot=" + slotId + " insert=true");
+                System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST insert=true");
                 return;
             }
 
@@ -98,7 +98,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
             this.menu.setCarried(ItemStack.EMPTY);
             refreshFromCache();
-            System.out.println("[EOF Storage] non-owner click canceled local slot=" + slotId + " quick=" + (type == ClickType.QUICK_MOVE));
+            System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST quickMove=" + (type == ClickType.QUICK_MOVE));
             return;
         }
 
@@ -119,6 +119,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 PacketDistributor.sendToServer(
                         new StorageInsertSlotC2SPayload(storagePos, -1, slotId, storageSlots, invStack.copy())
                 );
+                System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST quickMoveInventoryToStorage=true");
             }
 
             refreshFromCache();
@@ -221,10 +222,6 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         }
 
         if (quickMove) {
-            if (this.minecraft.player != null) {
-                this.minecraft.player.getInventory().add(stack.copy());
-            }
-
             this.menu.setCarried(ItemStack.EMPTY);
             refreshFromCache();
             return;
@@ -234,9 +231,18 @@ public class ClientLocalStorageScreen extends ContainerScreen {
     }
 
     public void handleValidatedInsertResult(boolean accepted, int insertedCount) {
+        System.out.println("[EOF StorageResult] requester applying insert result accepted="
+                + accepted
+                + " inserted=" + insertedCount);
+
+        if (accepted && pendingInsertSourceSlot < 0 && !this.menu.getCarried().isEmpty()) {
+            ItemStack carried = this.menu.getCarried().copy();
+            carried.shrink(insertedCount);
+            this.menu.setCarried(carried.isEmpty() ? ItemStack.EMPTY : carried);
+        }
+
         pendingInsertStack = ItemStack.EMPTY;
         pendingInsertSourceSlot = -1;
-        this.menu.setCarried(ItemStack.EMPTY);
         refreshFromCache();
     }
 
