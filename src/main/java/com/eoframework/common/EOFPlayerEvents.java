@@ -12,6 +12,7 @@ public class EOFPlayerEvents {
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player) {
             OwnershipManager.removePlayer(player.getUUID());
+            ChunkOwnershipManager.removePlayer(player.getUUID());
         }
     }
 }

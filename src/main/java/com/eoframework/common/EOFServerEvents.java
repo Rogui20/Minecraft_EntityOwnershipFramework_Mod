@@ -42,6 +42,7 @@ public class EOFServerEvents {
 
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
+        ChunkOwnershipManager.tick(event.getServer());
         for (ServerLevel level : event.getServer().getAllLevels()) {
             StorageOwnershipManager.tick(level);
         }

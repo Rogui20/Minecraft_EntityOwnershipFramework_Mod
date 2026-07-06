@@ -1,6 +1,7 @@
 package com.eoframework.network;
 
 import com.eoframework.EOFramework;
+import com.eoframework.common.BlockOwnershipManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -50,6 +51,7 @@ public record BlockPlaceRequestC2SPayload(
             if (!(payloadStack.getItem() instanceof BlockItem blockItem)) return;
             if (!level.isEmptyBlock(pos)) return;
             if (player.distanceToSqr(Vec3.atCenterOf(pos)) > 8.0D * 8.0D) return;
+            if (!BlockOwnershipManager.isOwner(player.serverLevel(), pos, player)) return;
 
             ItemStack held = player.getMainHandItem();
             if (!player.getAbilities().instabuild) {

@@ -40,7 +40,7 @@ public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active) implement
 
             var existingOwnerUuid = BlockOwnershipManager.getOwner(level, pos);
             var ownerUuid = BlockOwnershipManager.getOrAssignOwner(level, pos, player);
-            PacketDistributor.sendToPlayer(player, new BlockOwnerSyncS2CPayload(pos, ownerUuid));
+            PacketDistributor.sendToPlayer(player, new ChunkOwnerSyncS2CPayload(level.dimension().location().toString(), pos.getX() >> 4, pos.getZ() >> 4, ownerUuid));
 
             EOFramework.LOGGER.info(
                     "[EOF BlockBreakAssist] pos={} owner={} requester={} active={}",
