@@ -12,6 +12,10 @@ import java.util.List;
 
 public class ClientLocalStorageOpener {
     public static boolean openCachedStorage(BlockPos pos, Component title) {
+        return openCachedStorage(pos, title, ClientStorageCache.isOwner(ClientStorageCache.canonicalPos(pos)));
+    }
+
+    public static boolean openCachedStorage(BlockPos pos, Component title, boolean ownerView) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return false;
 
@@ -59,7 +63,6 @@ public class ClientLocalStorageOpener {
         );
 
         mc.player.containerMenu = menu;
-        boolean ownerView = ClientStorageCache.isOwner(canonicalPos);
         mc.setScreen(new ClientLocalStorageScreen(menu, mc.player.getInventory(), title, canonicalPos, ownerView));
 
         EOFramework.LOGGER.info(

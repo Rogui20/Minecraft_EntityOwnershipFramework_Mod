@@ -1,5 +1,7 @@
 package com.eoframework.client;
 
+import com.eoframework.EOFramework;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 
@@ -34,11 +36,11 @@ public class ClientLocalStorageSession {
 
         long now = mc.level.getGameTime();
 
-        if (active && positions.contains(pos)) {
-            return true;
+        boolean suppress = (active || now <= suppressUntil) && positions.contains(pos);
+        if (suppress) {
+            EOFramework.LOGGER.info("[EOF StorageSession] suppress block event pos={}", pos);
         }
-
-        return now <= suppressUntil && positions.contains(pos);
+        return suppress;
     }
 
     public static boolean shouldSuppressMenuPacket() {
@@ -46,6 +48,10 @@ public class ClientLocalStorageSession {
         if (mc.level == null) return false;
 
         long now = mc.level.getGameTime();
-        return active || now <= suppressUntil;
+        boolean suppress = active || now <= suppressUntil;
+        if (suppress) {
+            EOFramework.LOGGER.info("[EOF StorageSession] suppress open screen pos={}", positions);
+        }
+        return suppress;
     }
 }
