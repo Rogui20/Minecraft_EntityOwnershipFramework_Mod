@@ -83,7 +83,6 @@ public abstract class MultiPlayerGameModeMixin {
 
     @Inject(method = "continueDestroyBlock", at = @At("HEAD"), cancellable = true)
     private void eof$continueOwnerAuthoritativeBreak(BlockPos pos, Direction face, CallbackInfoReturnable<Boolean> cir) {
-        Minecraft mc = Minecraft.getInstance();
         if (!ClientOwnedBlockRuntime.isCellOwnedByMe(pos)) {
             ClientBlockBreakRuntime.continueNonOwnerAssist(pos);
             ClientOwnedBlockRuntime.logOwnershipDecision("continueDestroyBlock", pos, true);
@@ -93,21 +92,6 @@ public abstract class MultiPlayerGameModeMixin {
         }
 
         ClientOwnedBlockRuntime.logOwnershipDecision("continueDestroyBlock", pos, false);
-        if (mc.level == null || mc.player == null) return;
-        BlockState state = mc.level.getBlockState(pos);
-        if (state.isAir()) return;
-
-        this.destroyProgress += ClientBlockBreakRuntime.assistedProgress(pos, state);
-        if (this.destroyProgress >= 1.0F) {
-            this.isDestroying = false;
-            this.destroyBlock(pos);
-            this.destroyProgress = 0.0F;
-            this.destroyTicks = 0.0F;
-            this.destroyDelay = 5;
-            ClientBlockBreakRuntime.sendOwnerProgress(pos, -1);
-            cir.setReturnValue(true);
-            cir.cancel();
-        }
     }
 
     @Inject(method = "continueDestroyBlock", at = @At("RETURN"))

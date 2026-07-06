@@ -4,7 +4,6 @@ import com.eoframework.EOFramework;
 import com.eoframework.common.BlockOwnershipManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -12,16 +11,23 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active) implements CustomPacketPayload {
+public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active, float speed) implements CustomPacketPayload {
     public static final Type<BlockBreakAssistC2SPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(EOFramework.MODID, "block_break_assist_c2s"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, BlockBreakAssistC2SPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    BlockPos.STREAM_CODEC, BlockBreakAssistC2SPayload::pos,
-                    ByteBufCodecs.BOOL, BlockBreakAssistC2SPayload::active,
-                    BlockBreakAssistC2SPayload::new
-            );
+    public static final StreamCodec<RegistryFriendlyByteBuf, BlockBreakAssistC2SPayload> STREAM_CODEC = new StreamCodec<>() {
+        @Override
+        public BlockBreakAssistC2SPayload decode(RegistryFriendlyByteBuf buf) {
+            return new BlockBreakAssistC2SPayload(BlockPos.STREAM_CODEC.decode(buf), buf.readBoolean(), buf.readFloat());
+        }
+
+        @Override
+        public void encode(RegistryFriendlyByteBuf buf, BlockBreakAssistC2SPayload payload) {
+            BlockPos.STREAM_CODEC.encode(buf, payload.pos());
+            buf.writeBoolean(payload.active());
+            buf.writeFloat(payload.speed());
+        }
+    };
 
     @Override
     public Type<? extends CustomPacketPayload> type() {
@@ -43,10 +49,11 @@ public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active) implement
             PacketDistributor.sendToPlayer(player, new ChunkOwnerSyncS2CPayload(level.dimension().location().toString(), pos.getX() >> 4, pos.getZ() >> 4, ownerUuid));
 
             EOFramework.LOGGER.info(
-                    "[EOF BlockBreakAssist] pos={} owner={} requester={} active={}",
-                    pos,
-                    ownerUuid,
+                    "[EOF BlockBreakAssist] assist received requester={} owner={} pos={} speed={} active={}",
                     player.getUUID(),
+                    ownerUuid,
+                    pos,
+                    payload.speed(),
                     payload.active()
             );
 
@@ -82,7 +89,7 @@ public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active) implement
                 return;
             }
 
-            PacketDistributor.sendToPlayer(owner, new BlockBreakAssistS2CPayload(player.getUUID(), pos, payload.active()));
+            PacketDistributor.sendToPlayer(owner, new BlockBreakAssistS2CPayload(player.getUUID(), pos, payload.active(), payload.speed()));
         });
     }
 }

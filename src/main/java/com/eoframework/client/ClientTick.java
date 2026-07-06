@@ -20,6 +20,7 @@ public class ClientTick {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
         ClientAuthEntities.tickClientAuthPickups();
+        ClientBlockBreakRuntime.tickOwnerAssists();
         tickCounter++;
         if (tickCounter % 20 != 0) return;
     }
