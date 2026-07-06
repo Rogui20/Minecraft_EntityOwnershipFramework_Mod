@@ -66,6 +66,13 @@ public class ClientLocalStorageOpener {
         mc.setScreen(new ClientLocalStorageScreen(menu, mc.player.getInventory(), title, canonicalPos, ownerView));
 
         EOFramework.LOGGER.info(
+                "[EOF ClientStorageOpen] clicked={} canonical={} rows={} firstNonEmptyIndexes={}",
+                pos,
+                canonicalPos,
+                rows,
+                firstNonEmptyIndexes(cached)
+        );
+        EOFramework.LOGGER.info(
                 "[EOF Storage] opened cached storage pos={} slots={} rows={}",
                 pos,
                 size,
@@ -74,5 +81,16 @@ public class ClientLocalStorageOpener {
         ClientLocalStorageSession.begin(ClientStorageAnimations.animationPositions(canonicalPos));
         ClientStorageAnimations.open(canonicalPos);
         return true;
+    }
+
+
+    private static List<Integer> firstNonEmptyIndexes(List<ItemStack> items) {
+        java.util.ArrayList<Integer> indexes = new java.util.ArrayList<>();
+        for (int i = 0; i < items.size() && indexes.size() < 12; i++) {
+            if (!items.get(i).isEmpty()) {
+                indexes.add(i);
+            }
+        }
+        return indexes;
     }
 }

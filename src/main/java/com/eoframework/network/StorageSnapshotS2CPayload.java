@@ -69,10 +69,11 @@ public record StorageSnapshotS2CPayload(
         context.enqueueWork(() -> {
             ClientStorageCache.put(payload.canonicalStoragePos(), payload.storagePositions(), payload.items(), payload.owner());
             EOFramework.LOGGER.info(
-                    "[EOF StorageSnapshot] received canonicalPos={} ownerView={} slots={}",
+                    "[EOF StorageSnapshot] received canonicalPos={} ownerView={} slots={} firstNonEmptyIndexes={}",
                     payload.canonicalStoragePos(),
                     payload.owner(),
-                    payload.items().size()
+                    payload.items().size(),
+                    firstNonEmptyIndexes(payload.items())
             );
             var mc = net.minecraft.client.Minecraft.getInstance();
 
@@ -81,5 +82,15 @@ public record StorageSnapshotS2CPayload(
                 screen.refreshFromCache();
             }
         });
+    }
+
+    private static List<Integer> firstNonEmptyIndexes(List<ItemStack> items) {
+        List<Integer> indexes = new ArrayList<>();
+        for (int i = 0; i < items.size() && indexes.size() < 12; i++) {
+            if (!items.get(i).isEmpty()) {
+                indexes.add(i);
+            }
+        }
+        return indexes;
     }
 }

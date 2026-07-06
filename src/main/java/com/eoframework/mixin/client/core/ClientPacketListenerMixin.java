@@ -3,7 +3,6 @@ package com.eoframework.mixin.client.core;
 import com.eoframework.client.ClientAuthEntities;
 import com.eoframework.client.ClientLocalStorageSession;
 import com.eoframework.client.ClientOwnedBlockRuntime;
-import com.eoframework.client.ClientStorageAnimationSuppressor;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -48,7 +47,7 @@ public class ClientPacketListenerMixin {
 
     @Inject(method = "handleBlockEvent", at = @At("HEAD"), cancellable = true)
     private void eof$suppressStorageBlockEvent(ClientboundBlockEventPacket packet, CallbackInfo ci) {
-        if (ClientLocalStorageSession.shouldSuppressBlockEvent(packet.getPos())) {
+        if (packet.getB0() == 1 && ClientLocalStorageSession.shouldSuppressBlockEvent(packet.getPos())) {
             ci.cancel();
         }
     }
