@@ -20,7 +20,15 @@ public class ClientLocalStorageScreenStorageGuardMixin {
             CallbackInfo ci
     ) {
         ClientLocalStorageScreen screen = (ClientLocalStorageScreen) (Object) this;
+        if (screen.isOwnerView()) return;
+
         int effectiveSlotId = slot != null ? slot.index : slotId;
+        if (screen.isHandlingStorageGuardClick()) {
+            screen.logStorageGuardRecursionBlocked("ClientLocalStorageScreen.slotClicked", effectiveSlotId, type);
+            ci.cancel();
+            return;
+        }
+
         boolean cancel = screen.shouldBlockVanillaClick(effectiveSlotId, type);
         ItemStack beforeCarried = screen.getMenu().getCarried().copy();
 
