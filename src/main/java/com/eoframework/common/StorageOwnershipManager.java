@@ -810,6 +810,13 @@ public class StorageOwnershipManager {
                 PacketDistributor.sendToPlayer(requester, new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId, carriedToken));
             }
             return false;
+        } else if (slot >= 0 && sourceSlot >= storageSlots) {
+            logStorageInsertNoToken(requester, requestId, sourceSlot, storageSlots, menuSlotIdToPlayerInventoryIndex(sourceSlot, storageSlots), ItemStack.EMPTY, offered, slot, ItemStack.EMPTY, 0, 0, 0, ItemStack.EMPTY, "UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE");
+            logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE");
+            if (notifyFailure) {
+                PacketDistributor.sendToPlayer(requester, new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId, carriedToken));
+            }
+            return false;
         }
 
         if (slot < 0) {
