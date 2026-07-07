@@ -327,9 +327,9 @@ public class StorageOwnershipManager {
         int totalSlots = collectStorageItems(level, positions).size();
 
         if (slot < 0 || slot >= totalSlots || isOwner(level, clickedPos, requester)) {
+            sendTakeResult(requester, false, quickMove, ItemStack.EMPTY, requestId);
             List<ItemStack> fresh = collectStorageItems(level, positions);
             sendSnapshot(requester, positions, fresh, isOwner(level, clickedPos, requester));
-            sendTakeResult(requester, false, quickMove, ItemStack.EMPTY, requestId);
             return false;
         }
 
@@ -342,9 +342,9 @@ public class StorageOwnershipManager {
             if (index < container.getContainerSize()) {
                 ItemStack stack = container.getItem(index);
                 if (stack.isEmpty()) {
+                    sendTakeResult(requester, false, quickMove, ItemStack.EMPTY, requestId);
                     List<ItemStack> fresh = collectStorageItems(level, positions);
                     sendSnapshot(requester, positions, fresh, false);
-                    sendTakeResult(requester, false, quickMove, ItemStack.EMPTY, requestId);
                     return false;
                 }
 
@@ -394,8 +394,6 @@ public class StorageOwnershipManager {
                 requester.getInventory().setChanged();
                 requester.containerMenu.broadcastChanges();
 
-                List<ItemStack> fresh = collectStorageItems(level, positions);
-                broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
                 EOFDebug.log(EOFDebug.Flag.STORAGE, 
                         "[EOF StorageTake] server TAKE result stack requestId={} accepted=true quickMove={} stack={}",
                         requestId,
@@ -403,6 +401,8 @@ public class StorageOwnershipManager {
                         taken
                 );
                 sendTakeResult(requester, true, quickMove, taken, requestId);
+                List<ItemStack> fresh = collectStorageItems(level, positions);
+                broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
 
                 return true;
             }
@@ -879,18 +879,18 @@ public class StorageOwnershipManager {
                     removeFromPlayerInventorySlot(requester, sourceSlot, storageSlots, sourceBackedOffer, inserted);
                 }
 
-                List<ItemStack> fresh = collectStorageItems(level, positions);
-                broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
-
                 if (sourceSlot < 0) {
                     VALIDATED_CARRIED.remove(requester.getUUID());
-                    EOFDebug.log(EOFDebug.Flag.STORAGE_INSERT, "server insert token={} consumed requestId={} requester={}", carriedToken, requestId, requester.getGameProfile().getName());
+                    EOFDebug.log(EOFDebug.Flag.STORAGE_INSERT, "server token consumed reason=INSERT_ACCEPTED token={} requestId={} requester={}", carriedToken, requestId, requester.getGameProfile().getName());
                 }
 
                 PacketDistributor.sendToPlayer(
                         requester,
                         new com.eoframework.network.StorageInsertResultS2CPayload(true, inserted, sourceSlot, requestId, carriedToken)
                 );
+
+                List<ItemStack> fresh = collectStorageItems(level, positions);
+                broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
 
                 ItemStack afterSource = sourceSlot >= 0
                         ? getPlayerInventorySourceStack(requester, sourceSlot, storageSlots).copy()
@@ -975,6 +975,11 @@ public class StorageOwnershipManager {
 
         requester.getInventory().setChanged();
         requester.containerMenu.broadcastChanges();
+        ValidatedCarried validated = VALIDATED_CARRIED.get(requester.getUUID());
+        if (validated != null && ItemStack.isSameItemSameComponents(validated.stack(), offered) && validated.stack().getCount() == offered.getCount()) {
+            VALIDATED_CARRIED.remove(requester.getUUID());
+            EOFDebug.log(EOFDebug.Flag.STORAGE_INSERT, "server token consumed reason=PLACE_TO_INVENTORY_ACCEPTED token={} requestId={} requester={}", validated.token(), requestId, requesterName);
+        }
         PacketDistributor.sendToPlayer(requester, new StoragePlaceCarriedToInventoryResultS2CPayload(true, placed, targetSlot, requestId));
         EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF StoragePlaceInventory] operation=PLACE_CARRIED_TO_INVENTORY requestId={} pendingOperation=server carried={} carriedFromStorageValidated=server_validated_cursor sourceSlot=-1 storageSlots={} invIndex={} targetSlot={} requester={} placed={} accepted=true reason=placed",
