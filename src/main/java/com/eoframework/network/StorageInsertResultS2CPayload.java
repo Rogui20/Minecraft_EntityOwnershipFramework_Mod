@@ -13,7 +13,8 @@ public record StorageInsertResultS2CPayload(
         boolean accepted,
         int insertedCount,
         int sourceSlot,
-        long requestId
+        long requestId,
+        long carriedToken
 ) implements CustomPacketPayload {
     public static final Type<StorageInsertResultS2CPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(EOFramework.MODID, "storage_insert_result_s2c"));
@@ -26,6 +27,7 @@ public record StorageInsertResultS2CPayload(
                             buf.readBoolean(),
                             buf.readVarInt(),
                             buf.readVarInt(),
+                            buf.readVarLong(),
                             buf.readVarLong()
                     );
                 }
@@ -36,6 +38,7 @@ public record StorageInsertResultS2CPayload(
                     buf.writeVarInt(payload.insertedCount());
                     buf.writeVarInt(payload.sourceSlot());
                     buf.writeVarLong(payload.requestId());
+                    buf.writeVarLong(payload.carriedToken());
                 }
             };
 
@@ -49,14 +52,15 @@ public record StorageInsertResultS2CPayload(
             Minecraft mc = Minecraft.getInstance();
 
             System.out.println("[EOF StorageResult] accepted="
-                    + payload.accepted() + " operation=INSERT quick=false stack=EMPTY insertedCount=" + payload.insertedCount() + " sourceSlot=" + payload.sourceSlot() + " requestId=" + payload.requestId());
+                    + payload.accepted() + " operation=INSERT quick=false stack=EMPTY insertedCount=" + payload.insertedCount() + " sourceSlot=" + payload.sourceSlot() + " requestId=" + payload.requestId() + " token=" + payload.carriedToken());
 
             if (mc.screen instanceof ClientLocalStorageScreen screen) {
                 screen.handleValidatedInsertResult(
                         payload.accepted(),
                         payload.insertedCount(),
                         payload.sourceSlot(),
-                        payload.requestId()
+                        payload.requestId(),
+                        payload.carriedToken()
                 );
             }
         });

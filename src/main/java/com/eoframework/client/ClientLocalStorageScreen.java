@@ -27,6 +27,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
     private boolean carriedFromValidatedStorage = false;
     private long nextStorageRequestId = 1;
     private PendingOperation pendingOperation;
+    private long currentCarriedToken = 0L;
 
     public enum PendingOpType {
         TAKE,
@@ -42,7 +43,8 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             int slotId,
             int sourceSlot,
             ItemStack stackSnapshot,
-            long startedGameTime
+            long startedGameTime,
+            long carriedToken
     ) {
         @Override
         public String toString() {
@@ -51,7 +53,8 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                     + " slot=" + slotId
                     + " sourceSlot=" + sourceSlot
                     + " stack=" + stackSnapshot
-                    + " startedGameTime=" + startedGameTime;
+                    + " startedGameTime=" + startedGameTime
+                    + " carriedToken=" + carriedToken;
         }
     }
 
@@ -176,8 +179,9 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                     return;
                 }
                 long requestId = beginPending(PendingOpType.INSERT, slotId, -1, carriedBefore);
+                System.out.println("[EOF StorageInsert] INSERT request token=" + currentCarriedToken + " pending=" + pendingOperation + " requestId=" + requestId + " slot=" + slotId + " stack=" + carriedBefore);
                 PacketDistributor.sendToServer(
-                        new StorageInsertSlotC2SPayload(storagePos, slotId, -1, storageSlots, carriedBefore.copy(), requestId)
+                        new StorageInsertSlotC2SPayload(storagePos, slotId, -1, storageSlots, carriedBefore.copy(), requestId, currentCarriedToken)
                 );
                 return;
             }
@@ -206,7 +210,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
             long requestId = beginPending(PendingOpType.QUICK_INSERT, -1, slotId, invStack);
             PacketDistributor.sendToServer(
-                    new StorageInsertSlotC2SPayload(storagePos, -1, slotId, storageSlots, invStack.copy(), requestId)
+                    new StorageInsertSlotC2SPayload(storagePos, -1, slotId, storageSlots, invStack.copy(), requestId, 0L)
             );
             return;
         }
@@ -240,14 +244,14 @@ public class ClientLocalStorageScreen extends ContainerScreen {
     private long beginPending(PendingOpType type, int slotId, int sourceSlot, ItemStack stack) {
         long requestId = nextStorageRequestId++;
         long gameTime = this.minecraft != null && this.minecraft.level != null ? this.minecraft.level.getGameTime() : 0L;
-        pendingOperation = new PendingOperation(requestId, type, slotId, sourceSlot, stack.copy(), gameTime);
-        System.out.println("[EOF StoragePending] begin requestId=" + requestId + " type=" + type + " slot=" + slotId + " sourceSlot=" + sourceSlot);
+        pendingOperation = new PendingOperation(requestId, type, slotId, sourceSlot, stack.copy(), gameTime, currentCarriedToken);
+        System.out.println("[EOF StoragePending] begin requestId=" + requestId + " type=" + type + " slot=" + slotId + " sourceSlot=" + sourceSlot + " token=" + currentCarriedToken);
         return requestId;
     }
 
     private void clearPending(long requestId) {
         ItemStack beforeCarried = this.menu.getCarried().copy();
-        System.out.println("[EOF StoragePending] clear requestId=" + requestId + " pending=" + pendingOperation + " beforeCarried=" + beforeCarried);
+        System.out.println("[EOF StoragePending] clear requestId=" + requestId + " pending=" + pendingOperation + " beforeCarried=" + beforeCarried + " token=" + currentCarriedToken);
         pendingOperation = null;
         System.out.println("[EOF StoragePending] clear requestId=" + requestId + " afterCarried=" + this.menu.getCarried());
     }
@@ -258,6 +262,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 + " pendingOperation=" + pendingOperation
                 + " carried=" + this.menu.getCarried()
                 + " carriedFromStorageValidated=" + carriedFromValidatedStorage
+                + " carriedToken=" + currentCarriedToken
                 + " sourceSlot=" + sourceSlot
                 + " storageSlots=" + storageSlots
                 + " invIndex=" + invIndex
@@ -267,6 +272,9 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
     private void logPendingBlock(int slotId) {
         logDenied("BLOCKED_BY_PENDING", pendingOperation == null ? -1L : pendingOperation.requestId(), slotId, pendingOperation == null ? -1 : pendingOperation.sourceSlot(), getStorageSlotCount(), menuSlotIdToPlayerInventoryIndex(slotId, getStorageSlotCount()), "pending_operation");
+        if (pendingOperation != null && pendingOperation.type() == PendingOpType.INSERT) {
+            System.out.println("[EOF StorageInsert] blocked click because pending insert token=" + pendingOperation.carriedToken());
+        }
     }
 
     private void logEmptySlotRequest(int slotId) {
@@ -375,7 +383,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             clearPending(pendingOperation.requestId());
         }
         refreshFromCache();
-        System.out.println("[EOF StorageSnapshot] client snapshot beforeCarried=" + beforeCarried + " afterCarried=" + this.menu.getCarried() + " carriedFromStorageValidated=" + carriedFromValidatedStorage);
+        System.out.println("[EOF StorageSnapshot] client snapshot beforeCarried=" + beforeCarried + " beforeToken=" + currentCarriedToken + " afterCarried=" + this.menu.getCarried() + " afterToken=" + currentCarriedToken + " carriedFromStorageValidated=" + carriedFromValidatedStorage);
     }
 
     public void refreshFromCache() {
@@ -407,7 +415,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         return this.menu.getRowCount() * 9;
     }
 
-    public void handleValidatedTakeResult(boolean accepted, boolean quickMove, ItemStack stack, long requestId) {
+    public void handleValidatedTakeResult(boolean accepted, boolean quickMove, ItemStack stack, long requestId, long carriedToken) {
         ItemStack beforeCarried = this.menu.getCarried().copy();
         System.out.println("[EOF Storage] requester received result accepted="
                 + accepted
@@ -430,6 +438,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
         if (!accepted || stack.isEmpty()) {
             carriedFromValidatedStorage = false;
+            currentCarriedToken = 0L;
             clearPending(requestId);
             refreshFromCache();
             System.out.println("[EOF Storage] requester applied result accepted=" + accepted + " quick=" + quickMove + " stack=" + stack + " beforeCarried=" + beforeCarried + " afterCarried=" + this.menu.getCarried());
@@ -439,6 +448,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         if (quickMove) {
             this.menu.setCarried(ItemStack.EMPTY);
             carriedFromValidatedStorage = false;
+            currentCarriedToken = 0L;
             clearPending(requestId);
             refreshFromCache();
             System.out.println("[EOF Storage] requester applied result accepted=" + accepted + " quick=" + quickMove + " stack=" + stack + " beforeCarried=" + beforeCarried + " afterCarried=" + this.menu.getCarried());
@@ -447,14 +457,16 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
         this.menu.setCarried(stack.copy());
         carriedFromValidatedStorage = true;
+        currentCarriedToken = carriedToken;
+        System.out.println("[EOF StorageTake] client received token=" + carriedToken + " requestId=" + requestId + " stack=" + stack);
         clearPending(requestId);
         System.out.println("[EOF Storage] requester applied result accepted=" + accepted + " quick=" + quickMove + " stack=" + stack + " beforeCarried=" + beforeCarried + " afterCarried=" + this.menu.getCarried());
     }
 
-    public void handleValidatedInsertResult(boolean accepted, int insertedCount, int sourceSlot, long requestId) {
+    public void handleValidatedInsertResult(boolean accepted, int insertedCount, int sourceSlot, long requestId, long carriedToken) {
         System.out.println("[EOF StorageResult] requester applying insert result accepted="
                 + accepted
-                + " inserted=" + insertedCount + " sourceSlot=" + sourceSlot + " requestId=" + requestId);
+                + " inserted=" + insertedCount + " sourceSlot=" + sourceSlot + " requestId=" + requestId + " token=" + carriedToken);
 
         long expected = pendingOperation == null ? -1L : pendingOperation.requestId();
         System.out.println("[EOF StoragePending] result requestId=" + requestId + " expected=" + expected);
@@ -468,17 +480,20 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             return;
         }
 
-        if (accepted && sourceSlot < 0 && !this.menu.getCarried().isEmpty()) {
-            ItemStack carried = this.menu.getCarried().copy();
-            carried.shrink(insertedCount);
-            this.menu.setCarried(carried.isEmpty() ? ItemStack.EMPTY : carried);
-        }
-
         if (accepted && sourceSlot < 0) {
-            carriedFromValidatedStorage = !this.menu.getCarried().isEmpty();
+            if (carriedToken == currentCarriedToken) {
+                this.menu.setCarried(ItemStack.EMPTY);
+                carriedFromValidatedStorage = false;
+                currentCarriedToken = 0L;
+            }
         }
         if (accepted && sourceSlot >= 0) {
             carriedFromValidatedStorage = false;
+            currentCarriedToken = 0L;
+        }
+
+        if (!accepted && sourceSlot < 0) {
+            carriedFromValidatedStorage = !this.menu.getCarried().isEmpty();
         }
 
         clearPending(requestId);
