@@ -3,6 +3,7 @@ package com.eoframework.mixin.client.core;
 import com.eoframework.client.ClientAuthEntities;
 import com.eoframework.client.ClientLocalStorageSession;
 import com.eoframework.client.ClientOwnedBlockRuntime;
+import com.eoframework.common.EOFDebug;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -91,7 +92,7 @@ public class ClientPacketListenerMixin {
         for (int id : packet.getEntityIds()) {
             if (ClientAuthEntities.isClientAuth(id)) {
                 hasClientAuth = true;
-                System.out.println("[EOF ClientAuthItem] suppress remove id=" + id);
+                EOFDebug.log(EOFDebug.Flag.CLIENT_AUTH_ITEM, "suppress remove id={}", id);
             } else {
                 remaining.add(id);
             }
@@ -112,7 +113,7 @@ public class ClientPacketListenerMixin {
     @Inject(method = "handleSetEntityMotion", at = @At("HEAD"), cancellable = true)
     private void eof$suppressClientAuthMotion(ClientboundSetEntityMotionPacket packet, CallbackInfo ci) {
         if (ClientAuthEntities.isClientAuth(packet.getId())) {
-            System.out.println("[EOF ClientAuthItem] suppress motion id=" + packet.getId());
+            EOFDebug.log(EOFDebug.Flag.CLIENT_AUTH_ITEM, "suppress motion id={}", packet.getId());
             ci.cancel();
         }
     }
@@ -120,7 +121,7 @@ public class ClientPacketListenerMixin {
     @Inject(method = "handleTeleportEntity", at = @At("HEAD"), cancellable = true)
     private void eof$suppressClientAuthTeleport(ClientboundTeleportEntityPacket packet, CallbackInfo ci) {
         if (ClientAuthEntities.isClientAuth(packet.getId())) {
-            System.out.println("[EOF ClientAuthItem] suppress teleport id=" + packet.getId());
+            EOFDebug.log(EOFDebug.Flag.CLIENT_AUTH_ITEM, "suppress teleport id={}", packet.getId());
             ci.cancel();
         }
     }
@@ -130,7 +131,7 @@ public class ClientPacketListenerMixin {
         Entity entity = packet.getEntity(this.level);
 
         if (entity != null && ClientAuthEntities.isClientAuth(entity.getId())) {
-            System.out.println("[EOF ClientAuthItem] suppress move id=" + entity.getId());
+            EOFDebug.log(EOFDebug.Flag.CLIENT_AUTH_ITEM, "suppress move id={}", entity.getId());
             ci.cancel();
         }
     }
@@ -138,7 +139,7 @@ public class ClientPacketListenerMixin {
     @Inject(method = "handleSetEntityData", at = @At("HEAD"), cancellable = true)
     private void eof$suppressClientAuthEntityData(ClientboundSetEntityDataPacket packet, CallbackInfo ci) {
         if (ClientAuthEntities.isClientAuth(packet.id())) {
-            System.out.println("[EOF ClientAuthItem] suppress entity data id=" + packet.id());
+            EOFDebug.log(EOFDebug.Flag.CLIENT_AUTH_ITEM, "suppress entity data id={}", packet.id());
             ci.cancel();
         }
     }

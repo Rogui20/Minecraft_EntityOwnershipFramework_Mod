@@ -1,5 +1,6 @@
 package com.eoframework.common;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import com.eoframework.network.ReservedEntityIdsS2CPayload;
 import net.minecraft.server.level.ServerLevel;
@@ -32,7 +33,7 @@ public class EOFServerEvents {
                 new ReservedEntityIdsS2CPayload(start, count)
         );
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, 
                 "[EOF ClientAuthEntity] sent reserved ids start={} count={} player={}",
                 start,
                 count,

@@ -1,5 +1,6 @@
 package com.eoframework.client;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import com.eoframework.network.OwnerSpawnMobC2SPayload;
 import net.minecraft.client.Minecraft;
@@ -58,7 +59,7 @@ public class ClientAuthMobSpawner {
                 xRot
         ));
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.CLIENT_AUTH_ITEM, 
                 "[EOF ClientAuthMob] local zombie spawned id={} uuid={} pos={}",
                 id,
                 uuid,

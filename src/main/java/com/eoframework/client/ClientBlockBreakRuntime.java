@@ -1,5 +1,6 @@
 package com.eoframework.client;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import com.eoframework.network.BlockBreakAssistC2SPayload;
 import com.eoframework.network.BlockBreakProgressC2SPayload;
@@ -47,7 +48,7 @@ public class ClientBlockBreakRuntime {
     private static void sendNonOwnerAssist(BlockPos pos, boolean active, String phase) {
         float speed = active ? localDestroySpeed(pos) : 0.0F;
         PacketDistributor.sendToServer(new BlockBreakAssistC2SPayload(pos, active, speed));
-        EOFramework.LOGGER.info("[EOF BlockBreakAssist] assist {} sent pos={} speed={}", phase, pos, speed);
+        EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, "[EOF BlockBreakAssist] assist {} sent pos={} speed={}", phase, pos, speed);
     }
 
     private static float localDestroySpeed(BlockPos pos) {
@@ -67,7 +68,7 @@ public class ClientBlockBreakRuntime {
         } else {
             ASSISTS.remove(requester);
         }
-        EOFramework.LOGGER.info("[EOF BlockBreakAssist] assist received pos={} speed={} active={}", pos, speed, active);
+        EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, "[EOF BlockBreakAssist] assist received pos={} speed={} active={}", pos, speed, active);
     }
 
     public static void tickOwnerAssists() {
@@ -86,7 +87,7 @@ public class ClientBlockBreakRuntime {
             }
             float value = OWNER_ASSIST_PROGRESS.getOrDefault(pos, 0.0F) + entry.getValue();
             int stage = value <= 0.0F ? -1 : Math.min(9, (int)(value * 10.0F));
-            EOFramework.LOGGER.info("[EOF BlockBreakAssist] progress pos={} value={} stage={}", pos, value, stage);
+            EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, "[EOF BlockBreakAssist] progress pos={} value={} stage={}", pos, value, stage);
             sendOwnerProgress(pos, stage);
             if (value >= 1.0F) {
                 mc.gameMode.destroyBlock(pos);
@@ -132,7 +133,7 @@ public class ClientBlockBreakRuntime {
     public static void showRemoteProgress(int breakerId, BlockPos pos, int stage) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return;
-        EOFramework.LOGGER.info("[EOF BlockBreakAssist] progress received pos={} stage={}", pos, stage);
+        EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, "[EOF BlockBreakAssist] progress received pos={} stage={}", pos, stage);
         mc.level.destroyBlockProgress(breakerId, pos, stage);
     }
 

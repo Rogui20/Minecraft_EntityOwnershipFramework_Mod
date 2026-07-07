@@ -1,5 +1,6 @@
 package com.eoframework.common;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import com.eoframework.network.BlockLootProfileS2CPayload;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -50,7 +51,7 @@ public class ServerBlockLootProfileScanner {
 
         PacketDistributor.sendToPlayer(player, new BlockLootProfileS2CPayload(profiles));
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.NETWORK, 
                 "[EOF LootProfile] sent {} block-state loot profiles to {}",
                 profiles.size(),
                 player.getGameProfile().getName()

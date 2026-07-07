@@ -1,5 +1,6 @@
 package com.eoframework.network;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import com.eoframework.client.ClientBlockLootProfiles;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -104,7 +105,7 @@ public record BlockLootProfileS2CPayload(
                 ClientBlockLootProfiles.put(entry.getKey(), entry.getValue());
             }
 
-            EOFramework.LOGGER.info("[EOF LootProfile] received {} block-state loot profiles", payload.profiles().size());
+            EOFDebug.log(EOFDebug.Flag.NETWORK, "[EOF LootProfile] received {} block-state loot profiles", payload.profiles().size());
         });
     }
 }

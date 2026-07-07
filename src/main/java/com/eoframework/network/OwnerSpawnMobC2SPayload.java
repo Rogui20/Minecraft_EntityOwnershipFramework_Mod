@@ -1,5 +1,6 @@
 package com.eoframework.network;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -104,7 +105,7 @@ public record OwnerSpawnMobC2SPayload(
 
             level.addFreshEntity(entity);
 
-            EOFramework.LOGGER.info(
+            EOFDebug.log(EOFDebug.Flag.NETWORK, 
                     "[EOF ClientAuthMob] server spawned type={} id={} uuid={}",
                     payload.entityTypeId(),
                     payload.entityId(),

@@ -1,5 +1,6 @@
 package com.eoframework.mixin.client.core;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import com.eoframework.client.ClientBlockBreakRuntime;
 import com.eoframework.client.ClientLocalStorageOpener;
@@ -74,7 +75,7 @@ public abstract class MultiPlayerGameModeMixin {
         boolean hasCache = ClientStorageCache.has(canonicalPos);
         boolean ownerView = owner != null ? owner.equals(local) : ClientStorageCache.isOwner(canonicalPos);
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF StorageOpenAttempt] clicked={} canonical={} ownerView={} hasCache={} screenClass={}",
                 clickedPos,
                 canonicalPos,
@@ -84,7 +85,7 @@ public abstract class MultiPlayerGameModeMixin {
         );
 
         if (!hasCache) {
-            EOFramework.LOGGER.info(
+            EOFDebug.log(EOFDebug.Flag.STORAGE, 
                     "[EOF StorageOpenAttempt] missing cache for canonical={} ownerView={} allowing vanilla fallback temporarily",
                     canonicalPos,
                     ownerView
@@ -93,7 +94,7 @@ public abstract class MultiPlayerGameModeMixin {
         }
 
         boolean opened = ClientLocalStorageOpener.openCachedStorage(canonicalPos, clickedState.getBlock().getName(), ownerView);
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF StorageOpenResult] opened {} ownerView={} screenClass={}",
                 opened ? "ClientLocalStorageScreen" : "failed",
                 ownerView,

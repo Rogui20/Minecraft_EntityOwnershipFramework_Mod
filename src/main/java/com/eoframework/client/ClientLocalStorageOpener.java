@@ -1,5 +1,6 @@
 package com.eoframework.client;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -20,14 +21,14 @@ public class ClientLocalStorageOpener {
         if (mc.player == null || mc.level == null) return false;
 
         if (!ClientStorageCache.has(pos)) {
-            EOFramework.LOGGER.info("[EOF Storage] no cached storage at {}", pos);
+            EOFDebug.log(EOFDebug.Flag.STORAGE, "[EOF Storage] no cached storage at {}", pos);
             return false;
         }
 
         BlockPos canonicalPos = ClientStorageCache.canonicalPos(pos);
         List<ItemStack> cached = ClientStorageCache.get(canonicalPos);
         if (cached.isEmpty()) {
-            EOFramework.LOGGER.info("[EOF Storage] cached storage empty/invalid at {}", pos);
+            EOFDebug.log(EOFDebug.Flag.STORAGE, "[EOF Storage] cached storage empty/invalid at {}", pos);
             return false;
         }
 
@@ -65,14 +66,14 @@ public class ClientLocalStorageOpener {
         mc.player.containerMenu = menu;
         mc.setScreen(new ClientLocalStorageScreen(menu, mc.player.getInventory(), title, canonicalPos, ownerView));
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF ClientStorageOpen] clicked={} canonical={} rows={} firstNonEmptyIndexes={}",
                 pos,
                 canonicalPos,
                 rows,
                 firstNonEmptyIndexes(cached)
         );
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF Storage] opened cached storage pos={} slots={} rows={}",
                 pos,
                 size,
