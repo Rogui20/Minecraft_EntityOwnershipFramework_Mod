@@ -10,6 +10,7 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -342,10 +343,21 @@ public class StorageOwnershipManager {
                 }
 
                 ItemStack beforeContainer = stack.copy();
+                EOFramework.LOGGER.info(
+                        "[EOF StorageTake] server TAKE before slot stack requestId={} slotId={} stack={}",
+                        requestId,
+                        slot,
+                        beforeContainer
+                );
+                EOFramework.LOGGER.info(
+                        "[EOF StorageTake] server TAKE quickMove flag requestId={} quickMove={}",
+                        requestId,
+                        quickMove
+                );
                 ItemStack taken = stack.copy();
                 boolean addInventoryResult = true;
                 if (quickMove) {
-                    addInventoryResult = requester.getInventory().add(taken.copy());
+                    addInventoryResult = canFullyAddToInventory(requester.getInventory(), taken);
                     if (!addInventoryResult) {
                         EOFramework.LOGGER.info(
                                 "[EOF StorageTake] requestId={} operation=QUICK_TAKE requester={} slotId={} containerBefore={} containerAfter={} accepted=false reason=inventory_full",
@@ -358,6 +370,7 @@ public class StorageOwnershipManager {
                         sendTakeResult(requester, false, quickMove, ItemStack.EMPTY, requestId);
                         return false;
                     }
+                    requester.getInventory().add(taken.copy());
                 }
 
                 container.setItem(index, ItemStack.EMPTY);
@@ -377,6 +390,12 @@ public class StorageOwnershipManager {
 
                 List<ItemStack> fresh = collectStorageItems(level, positions);
                 broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
+                EOFramework.LOGGER.info(
+                        "[EOF StorageTake] server TAKE result stack requestId={} accepted=true quickMove={} stack={}",
+                        requestId,
+                        quickMove,
+                        taken
+                );
                 sendTakeResult(requester, true, quickMove, taken, requestId);
 
                 return true;
@@ -386,6 +405,25 @@ public class StorageOwnershipManager {
         }
 
         sendTakeResult(requester, false, quickMove, ItemStack.EMPTY, requestId);
+        return false;
+    }
+
+    private static boolean canFullyAddToInventory(Inventory inventory, ItemStack stack) {
+        int remaining = stack.getCount();
+
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack existing = inventory.getItem(i);
+            if (existing.isEmpty()) {
+                remaining -= Math.min(stack.getMaxStackSize(), inventory.getMaxStackSize());
+            } else if (ItemStack.isSameItemSameComponents(existing, stack)) {
+                remaining -= Math.min(existing.getMaxStackSize(), inventory.getMaxStackSize()) - existing.getCount();
+            }
+
+            if (remaining <= 0) {
+                return true;
+            }
+        }
+
         return false;
     }
 
