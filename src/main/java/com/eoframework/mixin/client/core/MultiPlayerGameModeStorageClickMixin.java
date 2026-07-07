@@ -5,6 +5,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -24,14 +26,22 @@ public class MultiPlayerGameModeStorageClickMixin {
         Minecraft mc = Minecraft.getInstance();
 
         if (!(mc.screen instanceof ClientLocalStorageScreen screen)) return;
-        if (!screen.shouldBlockVanillaClick(slotId, clickType)) return;
 
-        System.out.println("[EOF StorageGuard] MultiPlayerGameMode.handleInventoryMouseClick canceled containerId="
-                + containerId
-                + " slot="
-                + slotId
-                + " type="
-                + clickType);
+        boolean cancel = screen.shouldBlockVanillaClick(slotId, clickType);
+        ItemStack beforeCarried = player.containerMenu.getCarried().copy();
+        if (!cancel) {
+            screen.logStorageGuard("MultiPlayerGameMode.handleInventoryMouseClick", slotId, clickType, beforeCarried, false);
+            return;
+        }
+
+        AbstractContainerMenu menu = player.containerMenu;
+        screen.handleNonOwnerValidatedClick(
+                slotId >= 0 && slotId < menu.slots.size() ? menu.getSlot(slotId) : null,
+                slotId,
+                mouseButton,
+                clickType
+        );
+        screen.logStorageGuard("MultiPlayerGameMode.handleInventoryMouseClick", slotId, clickType, beforeCarried, true);
         ci.cancel();
     }
 }

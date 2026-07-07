@@ -187,6 +187,24 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         refreshFromCache();
     }
 
+    public void logStorageGuard(String point, int slotId, ClickType clickType, ItemStack beforeCarried, boolean cancel) {
+        ItemStack afterCarried = this.menu.getCarried();
+        System.out.println("[EOF StorageGuard] point="
+                + point
+                + " slotId="
+                + slotId
+                + " clickType="
+                + clickType
+                + " ownerView="
+                + ownerView
+                + " beforeCarried="
+                + beforeCarried
+                + " afterCarried="
+                + afterCarried
+                + " cancel="
+                + cancel);
+    }
+
     public boolean isForStorage(BlockPos pos) {
         return this.storagePos.equals(pos);
     }
