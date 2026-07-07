@@ -670,6 +670,43 @@ public class StorageOwnershipManager {
         );
     }
 
+
+    private static void logStorageInsertNoToken(
+            ServerPlayer requester,
+            long requestId,
+            int sourceSlot,
+            int storageSlots,
+            int invIndex,
+            ItemStack invStackBefore,
+            ItemStack payloadStack,
+            int targetSlot,
+            ItemStack targetBefore,
+            int targetMaxStackSize,
+            int containerMaxStackSize,
+            int insertedCount,
+            ItemStack invStackAfter,
+            String reason
+    ) {
+        EOFDebug.log(
+                EOFDebug.Flag.STORAGE_INSERT,
+                "[EOF STORAGE_INSERT_NO_TOKEN] requestId={} requester={} sourceSlot={} storageSlots={} invIndex={} invStackBefore={} payloadStack={} targetSlot={} targetBefore={} targetSlotMaxStack={} containerMaxStack={} insertedCount={} invStackAfter={} reason={}",
+                requestId,
+                requester.getGameProfile().getName(),
+                sourceSlot,
+                storageSlots,
+                invIndex,
+                invStackBefore,
+                payloadStack,
+                targetSlot,
+                targetBefore,
+                targetMaxStackSize,
+                containerMaxStackSize,
+                insertedCount,
+                invStackAfter,
+                reason
+        );
+    }
+
     private static ItemStack getPlayerInventorySourceStack(ServerPlayer player, int menuSlotId, int storageSlots) {
         int invIndex = menuSlotIdToPlayerInventoryIndex(menuSlotId, storageSlots);
         if (invIndex < 0 || invIndex >= player.getInventory().getContainerSize()) {
@@ -756,7 +793,7 @@ public class StorageOwnershipManager {
             return false;
         }
 
-        if (sourceSlot < 0) {
+        if (carriedToken > 0L) {
             ValidatedCarried validated = VALIDATED_CARRIED.get(requester.getUUID());
             String invalidReason = null;
             if (carriedToken == 0L) invalidReason = "TOKEN_NOT_FOUND";
@@ -770,6 +807,12 @@ public class StorageOwnershipManager {
                 }
                 return false;
             }
+        } else if (sourceSlot < storageSlots) {
+            logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "NO_SOURCE_SLOT");
+            if (notifyFailure) {
+                PacketDistributor.sendToPlayer(requester, new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId, carriedToken));
+            }
+            return false;
         }
 
         if (slot < 0) {
@@ -828,7 +871,7 @@ public class StorageOwnershipManager {
 
                 if (existing.isEmpty()) {
                     int amount = Math.min(toInsert.getCount(), toInsert.getMaxStackSize());
-                    if (sourceSlot < 0 && amount < toInsert.getCount()) {
+                    if (carriedToken > 0L && amount < toInsert.getCount()) {
                         logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "NO_SPACE");
                         if (notifyFailure) {
                             PacketDistributor.sendToPlayer(
@@ -845,7 +888,7 @@ public class StorageOwnershipManager {
                 } else if (ItemStack.isSameItemSameComponents(existing, toInsert)) {
                     int max = Math.min(existing.getMaxStackSize(), container.getMaxStackSize());
                     int room = max - existing.getCount();
-                    if (sourceSlot < 0 && room < toInsert.getCount()) {
+                    if (carriedToken > 0L && room < toInsert.getCount()) {
                         logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "NO_SPACE");
                         if (notifyFailure) {
                             PacketDistributor.sendToPlayer(
@@ -864,7 +907,10 @@ public class StorageOwnershipManager {
                 }
 
                 if (inserted <= 0) {
-                    logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "SLOT_REJECTED");
+                    if (carriedToken == 0L) {
+                        logStorageInsertNoToken(requester, requestId, sourceSlot, storageSlots, invIndex, beforeSource, offered, slot, existing.copy(), existing.getMaxStackSize(), container.getMaxStackSize(), 0, beforeSource, existing.isEmpty() ? "NO_SPACE" : "SLOT_REJECTED");
+                    }
+                    logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, existing.isEmpty() ? "NO_SPACE" : "SLOT_REJECTED");
                     if (notifyFailure) {
                         PacketDistributor.sendToPlayer(
                                 requester,
@@ -879,7 +925,7 @@ public class StorageOwnershipManager {
                     removeFromPlayerInventorySlot(requester, sourceSlot, storageSlots, sourceBackedOffer, inserted);
                 }
 
-                if (sourceSlot < 0) {
+                if (carriedToken > 0L) {
                     VALIDATED_CARRIED.remove(requester.getUUID());
                     EOFDebug.log(EOFDebug.Flag.STORAGE_INSERT, "server token consumed reason=INSERT_ACCEPTED token={} requestId={} requester={}", carriedToken, requestId, requester.getGameProfile().getName());
                 }
@@ -895,10 +941,13 @@ public class StorageOwnershipManager {
                 ItemStack afterSource = sourceSlot >= 0
                         ? getPlayerInventorySourceStack(requester, sourceSlot, storageSlots).copy()
                         : requester.containerMenu.getCarried().copy();
+                if (carriedToken == 0L) {
+                    logStorageInsertNoToken(requester, requestId, sourceSlot, storageSlots, invIndex, beforeSource, offered, slot, existing.copy(), existing.getMaxStackSize(), container.getMaxStackSize(), inserted, afterSource, "ACCEPTED");
+                }
                 EOFDebug.log(EOFDebug.Flag.STORAGE, 
                         "[EOF StorageInsert] requestId={} operation={} requester={} sourceSlot={} storageSlots={} invIndex={} before={} inserted={} after={} containerSlot={} containerBefore={} containerAfter={} accepted=true",
                         requestId,
-                        sourceSlot >= 0 ? "QUICK_INSERT" : "INSERT",
+                        carriedToken == 0L ? "INSERT_NO_TOKEN" : "INSERT",
                         requester.getGameProfile().getName(),
                         sourceSlot,
                         storageSlots,
