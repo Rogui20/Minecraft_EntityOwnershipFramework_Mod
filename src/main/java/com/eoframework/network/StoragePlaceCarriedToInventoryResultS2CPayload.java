@@ -2,6 +2,9 @@ package com.eoframework.network;
 
 import com.eoframework.EOFramework;
 import com.eoframework.client.ClientLocalStorageScreen;
+import com.eoframework.client.StorageDebug;
+
+import static com.eoframework.client.StorageDebug.Flag.STORAGE_RESULT;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -47,10 +50,7 @@ public record StoragePlaceCarriedToInventoryResultS2CPayload(
     public static void handle(StoragePlaceCarriedToInventoryResultS2CPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
-            System.out.println("[EOF StorageResult] accepted=" + payload.accepted()
-                    + " operation=PLACE_CARRIED_TO_INVENTORY placedCount=" + payload.placedCount()
-                    + " targetSlot=" + payload.targetSlot()
-                    + " requestId=" + payload.requestId());
+            StorageDebug.log(STORAGE_RESULT, "accepted={} operation=PLACE_CARRIED_TO_INVENTORY placedCount={} targetSlot={} requestId={}", payload.accepted(), payload.placedCount(), payload.targetSlot(), payload.requestId());
             if (mc.screen instanceof ClientLocalStorageScreen screen) {
                 screen.handleValidatedPlaceCarriedToInventoryResult(
                         payload.accepted(),
