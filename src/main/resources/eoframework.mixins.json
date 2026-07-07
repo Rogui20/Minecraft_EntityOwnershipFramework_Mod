@@ -9,6 +9,7 @@
   "client": [
     "client.core.ClientPacketListenerMixin",
     "client.core.MultiPlayerGameModeMixin",
+    "client.core.AbstractContainerScreenStorageClickMixin",
     "client.core.ClientLocalStorageScreenStorageGuardMixin",
     "client.core.MultiPlayerGameModeStorageClickMixin",
     "client.core.AbstractContainerMenuStorageMixin"
