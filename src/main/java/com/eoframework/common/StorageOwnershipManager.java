@@ -285,18 +285,21 @@ public class StorageOwnershipManager {
         return indexes;
     }
 
-    private static void sendTakeResult(ServerPlayer requester, boolean accepted, boolean quickMove, ItemStack stack) {
+    private static void sendTakeResult(ServerPlayer requester, boolean accepted, boolean quickMove, ItemStack stack, long requestId) {
         PacketDistributor.sendToPlayer(
                 requester,
                 new com.eoframework.network.StorageSlotResultS2CPayload(
                         accepted,
                         quickMove,
-                        stack.copy()
+                        stack.copy(),
+                        requestId
                 )
         );
 
         EOFramework.LOGGER.info(
-                "[EOF StorageTake] server validated accepted={} quickMove={} stack={} requester={}",
+                "[EOF StorageTake] requestId={} operation={} server validated accepted={} quickMove={} stack={} requester={} reason=validated",
+                requestId,
+                quickMove ? "QUICK_TAKE" : "TAKE",
                 accepted,
                 quickMove,
                 stack,
@@ -309,7 +312,8 @@ public class StorageOwnershipManager {
             BlockPos clickedPos,
             ServerPlayer requester,
             int slot,
-            boolean quickMove
+            boolean quickMove,
+            long requestId
     ) {
         List<BlockPos> positions = storagePositions(level, clickedPos);
         int totalSlots = collectStorageItems(level, positions).size();
@@ -317,7 +321,7 @@ public class StorageOwnershipManager {
         if (slot < 0 || slot >= totalSlots || isOwner(level, clickedPos, requester)) {
             List<ItemStack> fresh = collectStorageItems(level, positions);
             sendSnapshot(requester, positions, fresh, isOwner(level, clickedPos, requester));
-            sendTakeResult(requester, false, quickMove, ItemStack.EMPTY);
+            sendTakeResult(requester, false, quickMove, ItemStack.EMPTY, requestId);
             return false;
         }
 
@@ -332,26 +336,39 @@ public class StorageOwnershipManager {
                 if (stack.isEmpty()) {
                     List<ItemStack> fresh = collectStorageItems(level, positions);
                     sendSnapshot(requester, positions, fresh, false);
-                    sendTakeResult(requester, false, quickMove, ItemStack.EMPTY);
+                    sendTakeResult(requester, false, quickMove, ItemStack.EMPTY, requestId);
                     return false;
                 }
 
+                ItemStack beforeContainer = stack.copy();
                 ItemStack taken = stack.copy();
-                container.setItem(index, ItemStack.EMPTY);
-                container.setChanged();
-
                 boolean addInventoryResult = true;
                 if (quickMove) {
                     addInventoryResult = requester.getInventory().add(taken.copy());
                     if (!addInventoryResult) {
-                        requester.drop(taken.copy(), false);
+                        EOFramework.LOGGER.info(
+                                "[EOF StorageTake] requestId={} operation=QUICK_TAKE requester={} slotId={} containerBefore={} containerAfter={} accepted=false reason=inventory_full",
+                                requestId,
+                                requester.getGameProfile().getName(),
+                                slot,
+                                beforeContainer,
+                                stack
+                        );
+                        sendTakeResult(requester, false, quickMove, ItemStack.EMPTY, requestId);
+                        return false;
                     }
                 }
+
+                container.setItem(index, ItemStack.EMPTY);
+                container.setChanged();
+
                 EOFramework.LOGGER.info(
-                        "[EOF StorageTake] requester={} slot={} stack={} addInventoryResult={}",
+                        "[EOF StorageTake] requestId={} operation={} requester={} slotId={} containerBefore={} containerAfter=EMPTY addInventoryResult={}",
+                        requestId,
+                        quickMove ? "QUICK_TAKE" : "TAKE",
                         requester.getGameProfile().getName(),
                         slot,
-                        taken,
+                        beforeContainer,
                         quickMove ? addInventoryResult : "cursor"
                 );
                 requester.getInventory().setChanged();
@@ -359,7 +376,7 @@ public class StorageOwnershipManager {
 
                 List<ItemStack> fresh = collectStorageItems(level, positions);
                 broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
-                sendTakeResult(requester, true, quickMove, taken);
+                sendTakeResult(requester, true, quickMove, taken, requestId);
 
                 return true;
             }
@@ -367,12 +384,12 @@ public class StorageOwnershipManager {
             index -= container.getContainerSize();
         }
 
-        sendTakeResult(requester, false, quickMove, ItemStack.EMPTY);
+        sendTakeResult(requester, false, quickMove, ItemStack.EMPTY, requestId);
         return false;
     }
 
-    public static boolean takeSlotForNonOwner(ServerLevel level, BlockPos clickedPos, ServerPlayer requester, int slot, boolean quickMove) {
-        return takeSlotDirectlyForNonOwner(level, clickedPos, requester, slot, quickMove);
+    public static boolean takeSlotForNonOwner(ServerLevel level, BlockPos clickedPos, ServerPlayer requester, int slot, boolean quickMove, long requestId) {
+        return takeSlotDirectlyForNonOwner(level, clickedPos, requester, slot, quickMove, requestId);
     }
 
     public static void applyOwnerSlotResponse(
@@ -403,7 +420,8 @@ public class StorageOwnershipManager {
                     new com.eoframework.network.StorageSlotResultS2CPayload(
                             false,
                             quickMove,
-                            ItemStack.EMPTY
+                            ItemStack.EMPTY,
+                            0L
                     )
             );
 
@@ -421,7 +439,8 @@ public class StorageOwnershipManager {
                 new com.eoframework.network.StorageSlotResultS2CPayload(
                         true,
                         quickMove,
-                        stack.copy()
+                        stack.copy(),
+                        0L
                 )
         );
 
@@ -495,7 +514,8 @@ public class StorageOwnershipManager {
             ServerPlayer requester,
             int sourceSlot,
             int storageSlots,
-            ItemStack offered
+            ItemStack offered,
+            long requestId
     ) {
         List<BlockPos> positions = storagePositions(level, clickedPos);
         int totalSlots = collectStorageItems(level, positions).size();
@@ -509,6 +529,7 @@ public class StorageOwnershipManager {
                     sourceSlot,
                     storageSlots,
                     offered,
+                    requestId,
                     false
             )) {
                 return true;
@@ -517,7 +538,7 @@ public class StorageOwnershipManager {
 
         PacketDistributor.sendToPlayer(
                 requester,
-                new StorageInsertResultS2CPayload(false, 0, sourceSlot)
+                new StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId)
         );
 
         return false;
@@ -579,9 +600,10 @@ public class StorageOwnershipManager {
             int slot,
             int sourceSlot,
             int storageSlots,
-            ItemStack offered
+            ItemStack offered,
+            long requestId
     ) {
-        return insertSlotForNonOwner(level, clickedPos, requester, slot, sourceSlot, storageSlots, offered, true);
+        return insertSlotForNonOwner(level, clickedPos, requester, slot, sourceSlot, storageSlots, offered, requestId, true);
     }
 
     private static boolean insertSlotForNonOwner(
@@ -592,13 +614,14 @@ public class StorageOwnershipManager {
             int sourceSlot,
             int storageSlots,
             ItemStack offered,
+            long requestId,
             boolean notifyFailure
     ) {
         if (offered.isEmpty()) {
             if (notifyFailure) {
                 PacketDistributor.sendToPlayer(
                         requester,
-                        new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot)
+                        new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId)
                 );
             }
             return false;
@@ -609,7 +632,7 @@ public class StorageOwnershipManager {
             if (notifyFailure) {
                 PacketDistributor.sendToPlayer(
                         requester,
-                        new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot)
+                        new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId)
                 );
             }
             return false;
@@ -622,7 +645,8 @@ public class StorageOwnershipManager {
                     requester,
                     sourceSlot,
                     storageSlots,
-                    offered
+                    offered,
+                    requestId
             );
         }
 
@@ -636,11 +660,12 @@ public class StorageOwnershipManager {
                 if (notifyFailure) {
                     PacketDistributor.sendToPlayer(
                             requester,
-                            new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot)
+                            new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId)
                     );
                 }
                 EOFramework.LOGGER.info(
-                        "[EOF StorageInsert] requester={} sourceSlot={} storageSlots={} invIndex={} before={} inserted=0 after={}",
+                        "[EOF StorageInsert] requestId={} operation=INSERT requester={} sourceSlot={} storageSlots={} invIndex={} before={} inserted=0 after={} reason=source_mismatch",
+                        requestId,
                         requester.getGameProfile().getName(),
                         sourceSlot,
                         storageSlots,
@@ -686,20 +711,14 @@ public class StorageOwnershipManager {
                     if (notifyFailure) {
                         PacketDistributor.sendToPlayer(
                                 requester,
-                                new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot)
+                                new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId)
                         );
                     }
                     return false;
                 }
 
                 container.setChanged();
-                if (sourceSlot < 0) {
-                    ItemStack carried = requester.containerMenu.getCarried();
-                    if (!carried.isEmpty() && ItemStack.isSameItemSameComponents(carried, offered)) {
-                        carried.shrink(inserted);
-                        requester.containerMenu.setCarried(carried.isEmpty() ? ItemStack.EMPTY : carried);
-                    }
-                } else {
+                if (sourceSlot >= 0) {
                     removeFromPlayerInventorySlot(requester, sourceSlot, storageSlots, sourceBackedOffer, inserted);
                 }
 
@@ -708,21 +727,26 @@ public class StorageOwnershipManager {
 
                 PacketDistributor.sendToPlayer(
                         requester,
-                        new com.eoframework.network.StorageInsertResultS2CPayload(true, inserted, sourceSlot)
+                        new com.eoframework.network.StorageInsertResultS2CPayload(true, inserted, sourceSlot, requestId)
                 );
 
                 ItemStack afterSource = sourceSlot >= 0
                         ? getPlayerInventorySourceStack(requester, sourceSlot, storageSlots).copy()
                         : requester.containerMenu.getCarried().copy();
                 EOFramework.LOGGER.info(
-                        "[EOF StorageInsert] requester={} sourceSlot={} storageSlots={} invIndex={} before={} inserted={} after={}",
+                        "[EOF StorageInsert] requestId={} operation={} requester={} sourceSlot={} storageSlots={} invIndex={} before={} inserted={} after={} containerSlot={} containerBefore={} containerAfter={} accepted=true",
+                        requestId,
+                        sourceSlot >= 0 ? "QUICK_INSERT" : "INSERT",
                         requester.getGameProfile().getName(),
                         sourceSlot,
                         storageSlots,
                         invIndex,
                         beforeSource,
                         inserted,
-                        afterSource
+                        afterSource,
+                        slot,
+                        existing,
+                        container.getItem(index)
                 );
 
                 return true;
@@ -734,7 +758,7 @@ public class StorageOwnershipManager {
         if (notifyFailure) {
             PacketDistributor.sendToPlayer(
                     requester,
-                    new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot)
+                    new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId)
             );
         }
 

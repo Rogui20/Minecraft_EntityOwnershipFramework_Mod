@@ -13,7 +13,8 @@ import com.eoframework.EOFramework;
 public record StorageTakeSlotC2SPayload(
         BlockPos pos,
         int slot,
-        boolean quickMove
+        boolean quickMove,
+        long requestId
 ) implements CustomPacketPayload {
     public static final Type<StorageTakeSlotC2SPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(EOFramework.MODID, "storage_take_slot_c2s"));
@@ -25,7 +26,8 @@ public record StorageTakeSlotC2SPayload(
                     return new StorageTakeSlotC2SPayload(
                             BlockPos.STREAM_CODEC.decode(buf),
                             buf.readVarInt(),
-                            buf.readBoolean()
+                            buf.readBoolean(),
+                            buf.readVarLong()
                     );
                 }
 
@@ -34,6 +36,7 @@ public record StorageTakeSlotC2SPayload(
                     BlockPos.STREAM_CODEC.encode(buf, payload.pos());
                     buf.writeVarInt(payload.slot());
                     buf.writeBoolean(payload.quickMove());
+                    buf.writeVarLong(payload.requestId());
                 }
             };
 
@@ -45,14 +48,15 @@ public record StorageTakeSlotC2SPayload(
     public static void handle(StorageTakeSlotC2SPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)) return;
-            EOFramework.LOGGER.info("[EOF Storage] server received take request player={} pos={} slot={}",
-                    player.getGameProfile().getName(), payload.pos(), payload.slot());
+            EOFramework.LOGGER.info("[EOF Storage] server received take request player={} pos={} slot={} requestId={}",
+                    player.getGameProfile().getName(), payload.pos(), payload.slot(), payload.requestId());
             StorageOwnershipManager.takeSlotForNonOwner(
                     player.serverLevel(),
                     payload.pos(),
                     player,
                     payload.slot(),
-                    payload.quickMove()
+                    payload.quickMove(),
+                    payload.requestId()
             );
         });
     }
