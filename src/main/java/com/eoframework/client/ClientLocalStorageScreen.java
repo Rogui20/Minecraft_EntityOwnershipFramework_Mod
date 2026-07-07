@@ -284,23 +284,15 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
             if (!carriedBefore.isEmpty()) {
                 if (!carriedFromValidatedStorage) {
-                    logDecision("IGNORE", slotId, "UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE carried=" + carriedBefore);
-                    logDenied(
-                            "INSERT",
-                            -1L,
-                            slotId,
-                            carriedSourceSlot,
-                            storageSlots,
-                            menuSlotIdToPlayerInventoryIndex(carriedSourceSlot, storageSlots),
-                            "UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE"
-                    );
+                    logDecision("BLOCK_CURSOR_INVENTORY_TO_STORAGE", slotId, "BLOCKED_UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE carried=" + carriedBefore);
+                    EOFDebug.log(STORAGE_CLICK, "action=BLOCK_CURSOR_INVENTORY_TO_STORAGE no payload sent");
                     return;
                 }
                 logDecision("INSERT", slotId, "validated_cursor_to_storage");
                 long requestId = beginPending(PendingOpType.INSERT, slotId, -1, carriedBefore);
                 EOFDebug.log(STORAGE_INSERT, "INSERT request token={} pending={} requestId={} slot={} stack={}", currentCarriedToken, pendingOperation, requestId, slotId, carriedBefore);
                 PacketDistributor.sendToServer(
-                        new StorageInsertSlotC2SPayload(storagePos, slotId, -1, storageSlots, carriedBefore.copy(), requestId, currentCarriedToken)
+                        new StorageInsertSlotC2SPayload(storagePos, slotId, -1, storageSlots, carriedBefore.copy(), requestId, currentCarriedToken, false)
                 );
                 return;
             }
@@ -333,10 +325,11 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 return;
             }
 
-            logDecision("INSERT", slotId, "quick_move_inventory_to_storage");
+            logDecision("QUICK_INSERT", slotId, "quick_move_inventory_to_storage");
+            EOFDebug.log(STORAGE_CLICK, "action=QUICK_INSERT sourceSlot={}", slotId);
             long requestId = beginPending(PendingOpType.QUICK_INSERT, -1, slotId, invStack);
             PacketDistributor.sendToServer(
-                    new StorageInsertSlotC2SPayload(storagePos, -1, slotId, storageSlots, invStack.copy(), requestId, 0L)
+                    new StorageInsertSlotC2SPayload(storagePos, -1, slotId, storageSlots, invStack.copy(), requestId, 0L, true)
             );
             return;
         }
