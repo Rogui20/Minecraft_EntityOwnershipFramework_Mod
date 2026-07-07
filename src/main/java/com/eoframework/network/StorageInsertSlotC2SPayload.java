@@ -18,7 +18,8 @@ public record StorageInsertSlotC2SPayload(
         int storageSlots,
         ItemStack stack,
         long requestId,
-        long carriedToken
+        long carriedToken,
+        boolean quickMove
 ) implements CustomPacketPayload {
     public static final Type<StorageInsertSlotC2SPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(EOFramework.MODID, "storage_insert_slot_c2s"));
@@ -34,7 +35,8 @@ public record StorageInsertSlotC2SPayload(
                             buf.readVarInt(),
                             ItemStack.OPTIONAL_STREAM_CODEC.decode(buf),
                             buf.readVarLong(),
-                            buf.readVarLong()
+                            buf.readVarLong(),
+                            buf.readBoolean()
                     );
                 }
 
@@ -47,6 +49,7 @@ public record StorageInsertSlotC2SPayload(
                     ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, payload.stack());
                     buf.writeVarLong(payload.requestId());
                     buf.writeVarLong(payload.carriedToken());
+                    buf.writeBoolean(payload.quickMove());
                 }
             };
 
@@ -68,7 +71,8 @@ public record StorageInsertSlotC2SPayload(
                     payload.storageSlots(),
                     payload.stack(),
                     payload.requestId(),
-                    payload.carriedToken()
+                    payload.carriedToken(),
+                    payload.quickMove()
             );
         });
     }

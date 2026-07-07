@@ -578,7 +578,7 @@ public class StorageOwnershipManager {
         int totalSlots = collectStorageItems(level, positions).size();
 
         for (int globalSlot = 0; globalSlot < totalSlots; globalSlot++) {
-            if (insertSlotForNonOwner(
+            if (insertSlotForNonOwnerInternal(
                     level,
                     clickedPos,
                     requester,
@@ -751,10 +751,112 @@ public class StorageOwnershipManager {
             long requestId,
             long carriedToken
     ) {
-        return insertSlotForNonOwner(level, clickedPos, requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, true);
+        return insertSlotForNonOwnerInternal(level, clickedPos, requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, true);
     }
 
-    private static boolean insertSlotForNonOwner(
+    public static boolean insertSlotForNonOwner(
+            ServerLevel level,
+            BlockPos clickedPos,
+            ServerPlayer requester,
+            int slot,
+            int sourceSlot,
+            int storageSlots,
+            ItemStack offered,
+            long requestId,
+            long carriedToken,
+            boolean quickMove
+    ) {
+        if (quickMove) {
+            return quickInsertSlotForNonOwner(level, clickedPos, requester, sourceSlot, storageSlots, offered, requestId, carriedToken);
+        }
+        return insertSlotForNonOwnerInternal(level, clickedPos, requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, true);
+    }
+
+
+    private static boolean quickInsertSlotForNonOwner(
+            ServerLevel level,
+            BlockPos clickedPos,
+            ServerPlayer requester,
+            int sourceSlot,
+            int storageSlots,
+            ItemStack offered,
+            long requestId,
+            long carriedToken
+    ) {
+        int invIndex = menuSlotIdToPlayerInventoryIndex(sourceSlot, storageSlots);
+        ItemStack invStackBefore = invIndex >= 0 && invIndex < requester.getInventory().getContainerSize()
+                ? requester.getInventory().getItem(invIndex).copy()
+                : ItemStack.EMPTY;
+        String resultReason = "NO_SPACE";
+        int insertedCount = 0;
+
+        if (carriedToken != 0L) {
+            resultReason = "INVALID_QUICK_INSERT_TOKEN";
+        } else if (offered.isEmpty() || invStackBefore.isEmpty()) {
+            resultReason = "SOURCE_SLOT_EMPTY";
+        } else if (invIndex < 0 || !ItemStack.isSameItemSameComponents(invStackBefore, offered)) {
+            resultReason = "STACK_MISMATCH";
+        } else if (isOwner(level, clickedPos, requester)) {
+            resultReason = "OWNER_CANNOT_USE_NON_OWNER_PATH";
+        } else {
+            List<BlockPos> positions = storagePositions(level, clickedPos);
+            ItemStack toInsert = invStackBefore.copyWithCount(Math.min(offered.getCount(), invStackBefore.getCount()));
+
+            outer:
+            for (BlockPos pos : positions) {
+                BlockEntity be = level.getBlockEntity(pos);
+                if (!(be instanceof Container container)) continue;
+
+                for (int targetSlot = 0; targetSlot < container.getContainerSize(); targetSlot++) {
+                    ItemStack existing = container.getItem(targetSlot);
+                    int inserted = 0;
+
+                    if (existing.isEmpty()) {
+                        inserted = Math.min(toInsert.getCount(), Math.min(toInsert.getMaxStackSize(), container.getMaxStackSize()));
+                        if (inserted > 0) {
+                            container.setItem(targetSlot, toInsert.copyWithCount(inserted));
+                        }
+                    } else if (ItemStack.isSameItemSameComponents(existing, toInsert)) {
+                        int max = Math.min(existing.getMaxStackSize(), container.getMaxStackSize());
+                        int room = max - existing.getCount();
+                        if (room > 0) {
+                            inserted = Math.min(room, toInsert.getCount());
+                            existing.grow(inserted);
+                            container.setItem(targetSlot, existing);
+                        }
+                    }
+
+                    if (inserted > 0) {
+                        insertedCount = inserted;
+                        resultReason = "ACCEPTED";
+                        container.setChanged();
+                        removeFromPlayerInventorySlot(requester, sourceSlot, storageSlots, invStackBefore, inserted);
+                        List<ItemStack> fresh = collectStorageItems(level, positions);
+                        broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
+                        break outer;
+                    }
+                }
+            }
+        }
+
+        EOFDebug.log(
+                EOFDebug.Flag.STORAGE_INSERT,
+                "[EOF STORAGE_QUICK_INSERT] requestId={} sourceSlot={} invIndex={} invStackBefore={} insertedCount={} resultReason={}",
+                requestId,
+                sourceSlot,
+                invIndex,
+                invStackBefore,
+                insertedCount,
+                resultReason
+        );
+        PacketDistributor.sendToPlayer(
+                requester,
+                new StorageInsertResultS2CPayload(insertedCount > 0, insertedCount, sourceSlot, requestId, carriedToken)
+        );
+        return insertedCount > 0;
+    }
+
+    private static boolean insertSlotForNonOwnerInternal(
             ServerLevel level,
             BlockPos clickedPos,
             ServerPlayer requester,
@@ -811,6 +913,7 @@ public class StorageOwnershipManager {
             }
             return false;
         } else if (slot >= 0 && sourceSlot >= storageSlots) {
+            EOFDebug.log(EOFDebug.Flag.STORAGE_INSERT, "[EOF STORAGE_INSERT_CURSOR_BLOCKED] requestId={} sourceSlot={} targetSlot={} reason=UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE", requestId, sourceSlot, slot);
             logStorageInsertNoToken(requester, requestId, sourceSlot, storageSlots, menuSlotIdToPlayerInventoryIndex(sourceSlot, storageSlots), ItemStack.EMPTY, offered, slot, ItemStack.EMPTY, 0, 0, 0, ItemStack.EMPTY, "UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE");
             logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE");
             if (notifyFailure) {
