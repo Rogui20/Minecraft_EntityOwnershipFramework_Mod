@@ -156,12 +156,12 @@ public class StorageOwnershipManager {
         List<ItemStack> fresh = collectStorageItems(level, positions);
         broadcastSnapshotToNearbyExcept(level, clickedPos, positions, fresh, player.getUUID());
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF StorageCommit] canonical={} firstNonEmptyIndexes={}",
                 positions.get(0),
                 firstNonEmptyIndexes(items)
         );
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF Storage] commit applied pos={} slots={} player={}",
                 clickedPos,
                 items.size(),
@@ -220,7 +220,7 @@ public class StorageOwnershipManager {
         BlockPos second = state.getValue(ChestBlock.TYPE) == ChestType.RIGHT ? other.immutable() : pos.immutable();
         List<BlockPos> positions = List.of(first, second);
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF StorageOrder] clickedPos={} canonical={} positions={} chestTypes=[{},{}] facing={}",
                 pos,
                 first,
@@ -269,12 +269,7 @@ public class StorageOwnershipManager {
     }
 
     private static void sendSnapshot(ServerPlayer player, List<BlockPos> positions, List<ItemStack> items, boolean owner) {
-        EOFramework.LOGGER.info(
-                "[EOF StorageSnapshot] canonical={} slots={} firstNonEmptyIndexes={}",
-                positions.get(0),
-                items.size(),
-                firstNonEmptyIndexes(items)
-        );
+        EOFDebug.log(EOFDebug.Flag.STORAGE_SNAPSHOT, "canonical={} positions={} slots={} firstNonEmptyIndexes={}", positions.get(0), positions, items.size(), firstNonEmptyIndexes(items));
         PacketDistributor.sendToPlayer(
                 player,
                 new StorageSnapshotS2CPayload(positions.get(0), positions, items, owner)
@@ -296,7 +291,7 @@ public class StorageOwnershipManager {
         if (accepted && !quickMove && !stack.isEmpty()) {
             carriedToken = nextCarriedToken++;
             VALIDATED_CARRIED.put(requester.getUUID(), new ValidatedCarried(carriedToken, stack.copy()));
-            EOFramework.LOGGER.info("[EOF StorageTake] server generated token={} requestId={} requester={} stack={}", carriedToken, requestId, requester.getGameProfile().getName(), stack);
+            EOFDebug.log(EOFDebug.Flag.STORAGE_TAKE, "server generated token={} requestId={} requester={} stack={}", carriedToken, requestId, requester.getGameProfile().getName(), stack);
         }
         PacketDistributor.sendToPlayer(
                 requester,
@@ -309,7 +304,7 @@ public class StorageOwnershipManager {
                 )
         );
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF StorageTake] requestId={} operation={} server validated accepted={} quickMove={} stack={} requester={} reason=validated",
                 requestId,
                 quickMove ? "QUICK_TAKE" : "TAKE",
@@ -354,13 +349,13 @@ public class StorageOwnershipManager {
                 }
 
                 ItemStack beforeContainer = stack.copy();
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.STORAGE, 
                         "[EOF StorageTake] server TAKE before slot stack requestId={} slotId={} stack={}",
                         requestId,
                         slot,
                         beforeContainer
                 );
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.STORAGE, 
                         "[EOF StorageTake] server TAKE quickMove flag requestId={} quickMove={}",
                         requestId,
                         quickMove
@@ -370,7 +365,7 @@ public class StorageOwnershipManager {
                 if (quickMove) {
                     addInventoryResult = canFullyAddToInventory(requester.getInventory(), taken);
                     if (!addInventoryResult) {
-                        EOFramework.LOGGER.info(
+                        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                                 "[EOF StorageTake] requestId={} operation=QUICK_TAKE requester={} slotId={} containerBefore={} containerAfter={} accepted=false reason=inventory_full",
                                 requestId,
                                 requester.getGameProfile().getName(),
@@ -387,7 +382,7 @@ public class StorageOwnershipManager {
                 container.setItem(index, ItemStack.EMPTY);
                 container.setChanged();
 
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.STORAGE, 
                         "[EOF StorageTake] requestId={} operation={} requester={} slotId={} containerBefore={} containerAfter=EMPTY addInventoryResult={}",
                         requestId,
                         quickMove ? "QUICK_TAKE" : "TAKE",
@@ -401,7 +396,7 @@ public class StorageOwnershipManager {
 
                 List<ItemStack> fresh = collectStorageItems(level, positions);
                 broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.STORAGE, 
                         "[EOF StorageTake] server TAKE result stack requestId={} accepted=true quickMove={} stack={}",
                         requestId,
                         quickMove,
@@ -491,7 +486,7 @@ public class StorageOwnershipManager {
         if (!quickMove) {
             carriedToken = nextCarriedToken++;
             VALIDATED_CARRIED.put(requester.getUUID(), new ValidatedCarried(carriedToken, stack.copy()));
-            EOFramework.LOGGER.info("[EOF StorageTake] server generated token={} requestId={} requester={} stack={} source=owner_response", carriedToken, requestId, requester.getGameProfile().getName(), stack);
+            EOFDebug.log(EOFDebug.Flag.STORAGE_TAKE, "server generated token={} requestId={} requester={} stack={} source=owner_response", carriedToken, requestId, requester.getGameProfile().getName(), stack);
         }
 
         PacketDistributor.sendToPlayer(
@@ -508,7 +503,7 @@ public class StorageOwnershipManager {
         List<ItemStack> fresh = collectStorageItems(level, positions);
         broadcastSnapshotToNearby(level, clickedPos, positions, fresh);
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF Storage] owner approved/denied slot={} accepted=true item={} requester={} owner={}",
                 slot,
                 stack,
@@ -619,6 +614,62 @@ public class StorageOwnershipManager {
         return -1;
     }
 
+    private static void logStorageInsertTokenDecision(
+            ServerPlayer requester,
+            int targetSlot,
+            int sourceSlot,
+            ItemStack offered,
+            long requestId,
+            long carriedToken,
+            ValidatedCarried validated,
+            String invalidReason
+    ) {
+        EOFDebug.log(
+                EOFDebug.Flag.STORAGE_INSERT,
+                "server token decision accepted={} reason={} token={} requester={} targetSlot={} sourceSlot={} stack={} carriedTokenExists={} carriedTokenOwner={} carriedTokenConsumed={} tokenStackExpected={}",
+                invalidReason == null,
+                invalidReason == null ? "VALID" : invalidReason,
+                carriedToken,
+                requester.getGameProfile().getName(),
+                targetSlot,
+                sourceSlot,
+                offered,
+                validated != null && validated.token() == carriedToken,
+                requester.getUUID(),
+                validated == null,
+                validated == null ? ItemStack.EMPTY : validated.stack()
+        );
+    }
+
+    private static void logStorageInsertDenied(
+            ServerPlayer requester,
+            int targetSlot,
+            int sourceSlot,
+            int storageSlots,
+            ItemStack offered,
+            long requestId,
+            long carriedToken,
+            String reason
+    ) {
+        ValidatedCarried validated = sourceSlot < 0 ? VALIDATED_CARRIED.get(requester.getUUID()) : null;
+        EOFDebug.log(
+                EOFDebug.Flag.STORAGE_INSERT,
+                "server deny reason={} token={} requester={} targetSlot={} sourceSlot={} storageSlots={} stack={} carriedTokenExists={} carriedTokenOwner={} carriedTokenConsumed={} tokenStackExpected={} requestId={}",
+                reason,
+                carriedToken,
+                requester.getGameProfile().getName(),
+                targetSlot,
+                sourceSlot,
+                storageSlots,
+                offered,
+                validated != null && validated.token() == carriedToken,
+                requester.getUUID(),
+                sourceSlot < 0 && validated == null,
+                validated == null ? ItemStack.EMPTY : validated.stack(),
+                requestId
+        );
+    }
+
     private static ItemStack getPlayerInventorySourceStack(ServerPlayer player, int menuSlotId, int storageSlots) {
         int invIndex = menuSlotIdToPlayerInventoryIndex(menuSlotId, storageSlots);
         if (invIndex < 0 || invIndex >= player.getInventory().getContainerSize()) {
@@ -683,6 +734,7 @@ public class StorageOwnershipManager {
             boolean notifyFailure
     ) {
         if (offered.isEmpty()) {
+            logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "SOURCE_SLOT_EMPTY");
             if (notifyFailure) {
                 PacketDistributor.sendToPlayer(
                         requester,
@@ -694,6 +746,7 @@ public class StorageOwnershipManager {
 
         List<BlockPos> positions = storagePositions(level, clickedPos);
         if (isOwner(level, clickedPos, requester)) {
+            logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "OWNER_CANNOT_USE_NON_OWNER_PATH");
             if (notifyFailure) {
                 PacketDistributor.sendToPlayer(
                         requester,
@@ -706,11 +759,11 @@ public class StorageOwnershipManager {
         if (sourceSlot < 0) {
             ValidatedCarried validated = VALIDATED_CARRIED.get(requester.getUUID());
             String invalidReason = null;
-            if (carriedToken == 0L) invalidReason = "missing_token";
-            else if (validated == null) invalidReason = "unknown_or_consumed";
-            else if (validated.token() != carriedToken) invalidReason = "token_mismatch";
-            else if (!ItemStack.isSameItemSameComponents(validated.stack(), offered) || validated.stack().getCount() != offered.getCount()) invalidReason = "stack_mismatch";
-            EOFramework.LOGGER.info("[EOF StorageInsert] server insert token={} valid={} reason={} requestId={} requester={} offered={}", carriedToken, invalidReason == null, invalidReason == null ? "valid" : invalidReason, requestId, requester.getGameProfile().getName(), offered);
+            if (carriedToken == 0L) invalidReason = "TOKEN_NOT_FOUND";
+            else if (validated == null) invalidReason = "TOKEN_CONSUMED";
+            else if (validated.token() != carriedToken) invalidReason = "TOKEN_NOT_FOUND";
+            else if (!ItemStack.isSameItemSameComponents(validated.stack(), offered) || validated.stack().getCount() != offered.getCount()) invalidReason = "STACK_MISMATCH";
+            logStorageInsertTokenDecision(requester, slot, sourceSlot, offered, requestId, carriedToken, validated, invalidReason);
             if (invalidReason != null) {
                 if (notifyFailure) {
                     PacketDistributor.sendToPlayer(requester, new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId, carriedToken));
@@ -739,13 +792,14 @@ public class StorageOwnershipManager {
             ItemStack actualSource = getPlayerInventorySourceStack(requester, sourceSlot, storageSlots);
             beforeSource = actualSource.copy();
             if (actualSource.isEmpty() || !ItemStack.isSameItemSameComponents(actualSource, offered)) {
+                logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, actualSource.isEmpty() ? "SOURCE_SLOT_EMPTY" : "STACK_MISMATCH");
                 if (notifyFailure) {
                     PacketDistributor.sendToPlayer(
                             requester,
                             new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId, carriedToken)
                     );
                 }
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.STORAGE, 
                         "[EOF StorageInsert] requestId={} operation=INSERT requester={} sourceSlot={} storageSlots={} invIndex={} before={} inserted=0 after={} reason=source_mismatch",
                         requestId,
                         requester.getGameProfile().getName(),
@@ -775,6 +829,7 @@ public class StorageOwnershipManager {
                 if (existing.isEmpty()) {
                     int amount = Math.min(toInsert.getCount(), toInsert.getMaxStackSize());
                     if (sourceSlot < 0 && amount < toInsert.getCount()) {
+                        logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "NO_SPACE");
                         if (notifyFailure) {
                             PacketDistributor.sendToPlayer(
                                     requester,
@@ -791,6 +846,7 @@ public class StorageOwnershipManager {
                     int max = Math.min(existing.getMaxStackSize(), container.getMaxStackSize());
                     int room = max - existing.getCount();
                     if (sourceSlot < 0 && room < toInsert.getCount()) {
+                        logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "NO_SPACE");
                         if (notifyFailure) {
                             PacketDistributor.sendToPlayer(
                                     requester,
@@ -808,6 +864,7 @@ public class StorageOwnershipManager {
                 }
 
                 if (inserted <= 0) {
+                    logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "SLOT_REJECTED");
                     if (notifyFailure) {
                         PacketDistributor.sendToPlayer(
                                 requester,
@@ -827,7 +884,7 @@ public class StorageOwnershipManager {
 
                 if (sourceSlot < 0) {
                     VALIDATED_CARRIED.remove(requester.getUUID());
-                    EOFramework.LOGGER.info("[EOF StorageInsert] server insert token={} consumed requestId={} requester={}", carriedToken, requestId, requester.getGameProfile().getName());
+                    EOFDebug.log(EOFDebug.Flag.STORAGE_INSERT, "server insert token={} consumed requestId={} requester={}", carriedToken, requestId, requester.getGameProfile().getName());
                 }
 
                 PacketDistributor.sendToPlayer(
@@ -838,7 +895,7 @@ public class StorageOwnershipManager {
                 ItemStack afterSource = sourceSlot >= 0
                         ? getPlayerInventorySourceStack(requester, sourceSlot, storageSlots).copy()
                         : requester.containerMenu.getCarried().copy();
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.STORAGE, 
                         "[EOF StorageInsert] requestId={} operation={} requester={} sourceSlot={} storageSlots={} invIndex={} before={} inserted={} after={} containerSlot={} containerBefore={} containerAfter={} accepted=true",
                         requestId,
                         sourceSlot >= 0 ? "QUICK_INSERT" : "INSERT",
@@ -861,6 +918,7 @@ public class StorageOwnershipManager {
         }
 
         if (notifyFailure) {
+            logStorageInsertDenied(requester, slot, sourceSlot, storageSlots, offered, requestId, carriedToken, "SLOT_REJECTED");
             PacketDistributor.sendToPlayer(
                     requester,
                     new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot, requestId, carriedToken)
@@ -918,7 +976,7 @@ public class StorageOwnershipManager {
         requester.getInventory().setChanged();
         requester.containerMenu.broadcastChanges();
         PacketDistributor.sendToPlayer(requester, new StoragePlaceCarriedToInventoryResultS2CPayload(true, placed, targetSlot, requestId));
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF StoragePlaceInventory] operation=PLACE_CARRIED_TO_INVENTORY requestId={} pendingOperation=server carried={} carriedFromStorageValidated=server_validated_cursor sourceSlot=-1 storageSlots={} invIndex={} targetSlot={} requester={} placed={} accepted=true reason=placed",
                 requestId,
                 requester.containerMenu.getCarried(),
@@ -932,7 +990,7 @@ public class StorageOwnershipManager {
     }
 
     private static void logPlaceInventoryDenied(long requestId, String requesterName, int targetSlot, int sourceSlot, int storageSlots, int invIndex, ItemStack carried, ItemStack offered, String reason) {
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.STORAGE, 
                 "[EOF StorageDeny] operation=PLACE_CARRIED_TO_INVENTORY requestId={} pendingOperation=server carried={} carriedFromStorageValidated=server_validated_cursor sourceSlot={} storageSlots={} invIndex={} targetSlot={} requester={} offered={} reason={}",
                 requestId,
                 carried,

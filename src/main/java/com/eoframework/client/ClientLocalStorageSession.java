@@ -1,5 +1,6 @@
 package com.eoframework.client;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 
 import net.minecraft.client.Minecraft;
@@ -41,7 +42,7 @@ public class ClientLocalStorageSession {
         long now = mc.level.getGameTime();
         boolean suppress = (active || now <= suppressUntil) && isNearSuppressedStorage(soundPos);
         if (suppress) {
-            EOFramework.LOGGER.info("[EOF StorageSession] suppress storage sound pos={} sound={}", soundPos, sound);
+            EOFDebug.log(EOFDebug.Flag.STORAGE, "[EOF StorageSession] suppress storage sound pos={} sound={}", soundPos, sound);
         }
         return suppress;
     }
@@ -74,7 +75,7 @@ public class ClientLocalStorageSession {
 
         boolean suppress = (active || now <= suppressUntil) && positions.contains(pos);
         if (suppress) {
-            EOFramework.LOGGER.info("[EOF StorageSession] suppress block event pos={}", pos);
+            EOFDebug.log(EOFDebug.Flag.STORAGE, "[EOF StorageSession] suppress block event pos={}", pos);
         }
         return suppress;
     }
@@ -86,7 +87,7 @@ public class ClientLocalStorageSession {
         long now = mc.level.getGameTime();
         boolean suppress = active || now <= suppressUntil;
         if (suppress) {
-            EOFramework.LOGGER.info("[EOF StorageSession] suppress open screen pos={}", positions);
+            EOFDebug.log(EOFDebug.Flag.STORAGE, "[EOF StorageSession] suppress open screen pos={}", positions);
         }
         return suppress;
     }

@@ -1,5 +1,6 @@
 package com.eoframework.client;
 
+import com.eoframework.common.EOFDebug;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
 
@@ -33,6 +34,22 @@ public class ClientStorageCache {
     public static void put(BlockPos canonicalPos, List<BlockPos> positions, List<ItemStack> items, boolean owner) {
         BlockPos canonical = canonicalPos.immutable();
         List<BlockPos> aliases = positions.stream().map(BlockPos::immutable).toList();
+        for (BlockPos alias : aliases) {
+            Entry old = CACHE.get(alias);
+            if (old != null && !old.canonicalPos().equals(canonical)) {
+                EOFDebug.log(EOFDebug.Flag.STORAGE_SNAPSHOT,
+                        "cache replacing conflicting entry alias={} oldCanonical={} newCanonical={} oldPositions={} newPositions={}",
+                        alias, old.canonicalPos(), canonical, old.positions(), aliases);
+                remove(old.canonicalPos());
+            }
+        }
+        Entry oldCanonical = CACHE.get(canonical);
+        if (oldCanonical != null && !oldCanonical.positions().equals(aliases)) {
+            EOFDebug.log(EOFDebug.Flag.STORAGE_SNAPSHOT,
+                    "cache replacing canonical={} oldPositions={} newPositions={} oldSlots={} newSlots={}",
+                    canonical, oldCanonical.positions(), aliases, oldCanonical.items().size(), items.size());
+            remove(canonical);
+        }
         Entry entry = new Entry(
                 canonical,
                 aliases,

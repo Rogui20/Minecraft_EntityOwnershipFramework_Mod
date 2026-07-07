@@ -2,9 +2,9 @@ package com.eoframework.network;
 
 import com.eoframework.EOFramework;
 import com.eoframework.client.ClientLocalStorageScreen;
-import com.eoframework.client.StorageDebug;
+import com.eoframework.common.EOFDebug;
 
-import static com.eoframework.client.StorageDebug.Flag.STORAGE_TAKE;
+import static com.eoframework.common.EOFDebug.Flag.STORAGE_TAKE;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -56,7 +56,7 @@ public record StorageSlotRequestS2CPayload(
     public static void handle(StorageSlotRequestS2CPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
-            StorageDebug.log(STORAGE_TAKE, "owner received remote request slot={}", payload.slot());
+            EOFDebug.log(STORAGE_TAKE, "owner received remote request slot={}", payload.slot());
             if (mc.screen instanceof ClientLocalStorageScreen screen
                     && screen.isForStorageLoose(payload.pos())) {
                 screen.handleRemoteTakeRequest(

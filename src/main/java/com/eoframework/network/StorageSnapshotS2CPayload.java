@@ -3,6 +3,7 @@ package com.eoframework.network;
 import com.eoframework.EOFramework;
 import com.eoframework.client.ClientLocalStorageScreen;
 import com.eoframework.client.ClientStorageCache;
+import com.eoframework.common.EOFDebug;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -68,9 +69,10 @@ public record StorageSnapshotS2CPayload(
     public static void handle(StorageSnapshotS2CPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             ClientStorageCache.put(payload.canonicalStoragePos(), payload.storagePositions(), payload.items(), payload.owner());
-            EOFramework.LOGGER.info(
-                    "[EOF StorageSnapshot] received canonicalPos={} ownerView={} slots={} firstNonEmptyIndexes={}",
+            EOFDebug.log(EOFDebug.Flag.STORAGE_SNAPSHOT,
+                    "received canonicalPos={} positions={} ownerView={} slots={} firstNonEmptyIndexes={}",
                     payload.canonicalStoragePos(),
+                    payload.storagePositions(),
                     payload.owner(),
                     payload.items().size(),
                     firstNonEmptyIndexes(payload.items())

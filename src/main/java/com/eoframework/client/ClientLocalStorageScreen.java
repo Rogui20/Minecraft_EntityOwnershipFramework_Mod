@@ -1,5 +1,6 @@
 package com.eoframework.client;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.network.StorageCommitC2SPayload;
 import com.eoframework.network.StorageInsertSlotC2SPayload;
 import com.eoframework.network.StorageSlotResponseC2SPayload;
@@ -20,7 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static com.eoframework.client.StorageDebug.Flag.*;
+import static com.eoframework.common.EOFDebug.Flag.*;
 
 public class ClientLocalStorageScreen extends ContainerScreen {
     private final BlockPos storagePos;
@@ -133,7 +134,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             ItemStack before = slotId >= 0 && slotId < storageSlots
                     ? this.menu.getSlot(slotId).getItem().copy()
                     : ItemStack.EMPTY;
-            StorageDebug.log(STORAGE_CLICK, "owner click slotId={} current={}", slotId, before);
+            EOFDebug.log(STORAGE_CLICK, "owner click slotId={} current={}", slotId, before);
             super.slotClicked(slot, slotId, mouseButton, type);
             commitStorage();
             return;
@@ -165,17 +166,17 @@ public class ClientLocalStorageScreen extends ContainerScreen {
     private void logClickEntry(Slot slot, int slotId, int mouseButton, ClickType type) {
         boolean hasSlot = slotId >= 0 && slotId < this.menu.slots.size();
         boolean slotHasItem = hasSlot && this.menu.getSlot(slotId).hasItem();
-        StorageDebug.log(STORAGE_CLICK, "entry ownerView={} slotId={} clickType={} mouseButton={} hasSlot={} slotHasItem={} carried={} pendingOperation={} carriedToken={} carriedFromStorageValidated={}",
+        EOFDebug.log(STORAGE_CLICK, "entry ownerView={} slotId={} clickType={} mouseButton={} hasSlot={} slotHasItem={} carried={} pendingOperation={} carriedToken={} carriedFromStorageValidated={}",
                 ownerView, slotId, type, mouseButton, hasSlot, slotHasItem, this.menu.getCarried(), pendingOperation, currentCarriedToken, carriedFromValidatedStorage);
     }
 
     private void logDecision(String action, int slotId, String reason) {
-        StorageDebug.log(STORAGE_CLICK, "decision action={} slotId={} reason={} carried={} pendingOperation={} carriedToken={} carriedFromStorageValidated={}",
+        EOFDebug.log(STORAGE_CLICK, "decision action={} slotId={} reason={} carried={} pendingOperation={} carriedToken={} carriedFromStorageValidated={}",
                 action, slotId, reason, this.menu.getCarried(), pendingOperation, currentCarriedToken, carriedFromValidatedStorage);
     }
 
     private void setCarriedForStorage(ItemStack stack, String origin) {
-        StorageDebug.log(STORAGE_CURSOR, "menu.setCarried origin={} beforeCarried={} afterCarried={} pendingOperation={} carriedToken={} carriedFromStorageValidated={}",
+        EOFDebug.log(STORAGE_CURSOR, "menu.setCarried origin={} beforeCarried={} afterCarried={} pendingOperation={} carriedToken={} carriedFromStorageValidated={}",
                 origin, this.menu.getCarried(), stack, pendingOperation, currentCarriedToken, carriedFromValidatedStorage);
         this.menu.setCarried(stack);
     }
@@ -191,6 +192,18 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
         if (slotId >= 0 && slotId < storageSlots) {
             ItemStack slotStack = this.menu.getSlot(slotId).getItem().copy();
+
+            if (type == ClickType.PICKUP_ALL) {
+                logDecision("IGNORE", slotId, carriedFromValidatedStorage && !carriedBefore.isEmpty()
+                        ? "pickup_all_validated_cursor_blocked"
+                        : "pickup_all_non_owner_storage_blocked");
+                return;
+            }
+
+            if (type != ClickType.PICKUP && type != ClickType.QUICK_MOVE) {
+                logDecision("IGNORE", slotId, "unsupported_click_type_" + type);
+                return;
+            }
 
             if (type == ClickType.QUICK_MOVE) {
                 if (slotStack.isEmpty()) {
@@ -210,7 +223,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 }
                 logDecision("INSERT", slotId, "validated_cursor_to_storage");
                 long requestId = beginPending(PendingOpType.INSERT, slotId, -1, carriedBefore);
-                StorageDebug.log(STORAGE_INSERT, "INSERT request token={} pending={} requestId={} slot={} stack={}", currentCarriedToken, pendingOperation, requestId, slotId, carriedBefore);
+                EOFDebug.log(STORAGE_INSERT, "INSERT request token={} pending={} requestId={} slot={} stack={}", currentCarriedToken, pendingOperation, requestId, slotId, carriedBefore);
                 PacketDistributor.sendToServer(
                         new StorageInsertSlotC2SPayload(storagePos, slotId, -1, storageSlots, carriedBefore.copy(), requestId, currentCarriedToken)
                 );
@@ -284,25 +297,25 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         long requestId = nextStorageRequestId++;
         long gameTime = this.minecraft != null && this.minecraft.level != null ? this.minecraft.level.getGameTime() : 0L;
         pendingOperation = new PendingOperation(requestId, type, slotId, sourceSlot, stack.copy(), gameTime, currentCarriedToken);
-        StorageDebug.log(STORAGE_PENDING, "begin requestId={} type={} slot={} sourceSlot={} token={}", requestId, type, slotId, sourceSlot, currentCarriedToken);
+        EOFDebug.log(STORAGE, "begin requestId={} type={} slot={} sourceSlot={} token={}", requestId, type, slotId, sourceSlot, currentCarriedToken);
         return requestId;
     }
 
     private void clearPending(long requestId) {
         ItemStack beforeCarried = this.menu.getCarried().copy();
-        StorageDebug.log(STORAGE_PENDING, "clear requestId={} pending={} beforeCarried={} token={}", requestId, pendingOperation, beforeCarried, currentCarriedToken);
+        EOFDebug.log(STORAGE, "clear requestId={} pending={} beforeCarried={} token={}", requestId, pendingOperation, beforeCarried, currentCarriedToken);
         pendingOperation = null;
-        StorageDebug.log(STORAGE_PENDING, "clear requestId={} afterCarried={}", requestId, this.menu.getCarried());
+        EOFDebug.log(STORAGE, "clear requestId={} afterCarried={}", requestId, this.menu.getCarried());
     }
 
     private void logDenied(String operation, long requestId, int slotId, int sourceSlot, int storageSlots, int invIndex, String reason) {
-        StorageDebug.log(STORAGE_RESULT, "denied operation={} requestId={} pendingOperation={} carried={} carriedFromStorageValidated={} carriedToken={} sourceSlot={} storageSlots={} invIndex={} slotId={} reason={}", operation, requestId, pendingOperation, this.menu.getCarried(), carriedFromValidatedStorage, currentCarriedToken, sourceSlot, storageSlots, invIndex, slotId, reason);
+        EOFDebug.log(STORAGE_RESULT, "denied operation={} requestId={} pendingOperation={} carried={} carriedFromStorageValidated={} carriedToken={} sourceSlot={} storageSlots={} invIndex={} slotId={} reason={}", operation, requestId, pendingOperation, this.menu.getCarried(), carriedFromValidatedStorage, currentCarriedToken, sourceSlot, storageSlots, invIndex, slotId, reason);
     }
 
     private void logPendingBlock(int slotId) {
         logDenied("BLOCKED_BY_PENDING", pendingOperation == null ? -1L : pendingOperation.requestId(), slotId, pendingOperation == null ? -1 : pendingOperation.sourceSlot(), getStorageSlotCount(), menuSlotIdToPlayerInventoryIndex(slotId, getStorageSlotCount()), "pending_operation");
         if (pendingOperation != null && pendingOperation.type() == PendingOpType.INSERT) {
-            StorageDebug.log(STORAGE_INSERT, "blocked click because pending insert token={}", pendingOperation.carriedToken());
+            EOFDebug.log(STORAGE_INSERT, "blocked click because pending insert token={}", pendingOperation.carriedToken());
         }
     }
 
@@ -322,7 +335,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
     public void logStorageGuard(String point, int slotId, ClickType clickType, ItemStack beforeCarried, boolean cancel) {
         ItemStack afterCarried = this.menu.getCarried();
-        StorageDebug.log(STORAGE_GUARD, "point={} slotId={} clickType={} ownerView={} beforeCarried={} afterCarried={} cancel={}", point, slotId, clickType, ownerView, beforeCarried, afterCarried, cancel);
+        EOFDebug.log(STORAGE_GUARD, "point={} slotId={} clickType={} ownerView={} beforeCarried={} afterCarried={} cancel={}", point, slotId, clickType, ownerView, beforeCarried, afterCarried, cancel);
     }
 
     public boolean isForStorage(BlockPos pos) {
@@ -347,10 +360,10 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         }
 
         ItemStack current = this.menu.getSlot(slotId).getItem();
-        StorageDebug.log(STORAGE_TAKE, "owner current slot before approve slotId={} current={}", slotId, current);
+        EOFDebug.log(STORAGE_TAKE, "owner current slot before approve slotId={} current={}", slotId, current);
 
         if (current.isEmpty()) {
-            StorageDebug.log(STORAGE_RESULT, "owner take result slotId={} accepted=false", slotId);
+            EOFDebug.log(STORAGE_RESULT, "owner take result slotId={} accepted=false", slotId);
             PacketDistributor.sendToServer(new StorageSlotResponseC2SPayload(
                     requester,
                     storagePos,
@@ -368,7 +381,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
         commitStorage();
 
-        StorageDebug.log(STORAGE_RESULT, "owner take result slotId={} accepted=true taken={} requester={}", slotId, taken, requester);
+        EOFDebug.log(STORAGE_RESULT, "owner take result slotId={} accepted=true taken={} requester={}", slotId, taken, requester);
 
         PacketDistributor.sendToServer(new StorageSlotResponseC2SPayload(
                 requester,
@@ -399,7 +412,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             clearPending(pendingOperation.requestId());
         }
         refreshFromCache();
-        StorageDebug.log(STORAGE_SNAPSHOT, "client snapshot beforeCarried={} beforeToken={} afterCarried={} afterToken={} carriedFromStorageValidated={}", beforeCarried, currentCarriedToken, this.menu.getCarried(), currentCarriedToken, carriedFromValidatedStorage);
+        EOFDebug.log(STORAGE_SNAPSHOT, "client snapshot beforeCarried={} beforeToken={} afterCarried={} afterToken={} carriedFromStorageValidated={}", beforeCarried, currentCarriedToken, this.menu.getCarried(), currentCarriedToken, carriedFromValidatedStorage);
     }
 
     public void refreshFromCache() {
@@ -433,18 +446,18 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
     public void handleValidatedTakeResult(boolean accepted, boolean quickMove, ItemStack stack, long requestId, long carriedToken) {
         ItemStack beforeCarried = this.menu.getCarried().copy();
-        StorageDebug.log(STORAGE_RESULT, "take result received requestId={} accepted={} quick={} stack={} beforeCarried={}", requestId, accepted, quickMove, stack, beforeCarried);
+        EOFDebug.log(STORAGE_RESULT, "take result received requestId={} accepted={} quick={} stack={} beforeCarried={}", requestId, accepted, quickMove, stack, beforeCarried);
 
         long expected = pendingOperation == null ? -1L : pendingOperation.requestId();
-        StorageDebug.log(STORAGE_PENDING, "result requestId={} expected={}", requestId, expected);
+        EOFDebug.log(STORAGE, "result requestId={} expected={}", requestId, expected);
         if (pendingOperation == null || requestId != pendingOperation.requestId()) {
-            StorageDebug.log(STORAGE_RESULT, "ignored stale TAKE requestId={} pendingRequestId={}", requestId, expected);
+            EOFDebug.log(STORAGE_RESULT, "ignored stale TAKE requestId={} pendingRequestId={}", requestId, expected);
             return;
         }
 
         PendingOpType expectedType = quickMove ? PendingOpType.QUICK_TAKE : PendingOpType.TAKE;
         if (pendingOperation.type() != expectedType) {
-            StorageDebug.log(STORAGE_RESULT, "ignored mismatched TAKE type={} expected={}", pendingOperation.type(), expectedType);
+            EOFDebug.log(STORAGE_RESULT, "ignored mismatched TAKE type={} expected={}", pendingOperation.type(), expectedType);
             return;
         }
 
@@ -453,7 +466,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             currentCarriedToken = 0L;
             clearPending(requestId);
             refreshFromCache();
-            StorageDebug.log(STORAGE_RESULT, "requester applied result accepted={} quick={} stack={} beforeCarried={} afterCarried={}", accepted, quickMove, stack, beforeCarried, this.menu.getCarried());
+            EOFDebug.log(STORAGE_RESULT, "requester applied result accepted={} quick={} stack={} beforeCarried={} afterCarried={}", accepted, quickMove, stack, beforeCarried, this.menu.getCarried());
             return;
         }
 
@@ -463,30 +476,30 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             currentCarriedToken = 0L;
             clearPending(requestId);
             refreshFromCache();
-            StorageDebug.log(STORAGE_RESULT, "requester applied result accepted={} quick={} stack={} beforeCarried={} afterCarried={}", accepted, quickMove, stack, beforeCarried, this.menu.getCarried());
+            EOFDebug.log(STORAGE_RESULT, "requester applied result accepted={} quick={} stack={} beforeCarried={} afterCarried={}", accepted, quickMove, stack, beforeCarried, this.menu.getCarried());
             return;
         }
 
         setCarriedForStorage(stack.copy(), "take_result_accepted");
         carriedFromValidatedStorage = true;
         currentCarriedToken = carriedToken;
-        StorageDebug.log(STORAGE_TAKE, "client received token={} requestId={} stack={}", carriedToken, requestId, stack);
+        EOFDebug.log(STORAGE_TAKE, "client received token={} requestId={} stack={}", carriedToken, requestId, stack);
         clearPending(requestId);
-        StorageDebug.log(STORAGE_RESULT, "requester applied result accepted={} quick={} stack={} beforeCarried={} afterCarried={}", accepted, quickMove, stack, beforeCarried, this.menu.getCarried());
+        EOFDebug.log(STORAGE_RESULT, "requester applied result accepted={} quick={} stack={} beforeCarried={} afterCarried={}", accepted, quickMove, stack, beforeCarried, this.menu.getCarried());
     }
 
     public void handleValidatedInsertResult(boolean accepted, int insertedCount, int sourceSlot, long requestId, long carriedToken) {
-        StorageDebug.log(STORAGE_RESULT, "insert result received accepted={} inserted={} sourceSlot={} requestId={} token={} beforeCarried={}", accepted, insertedCount, sourceSlot, requestId, carriedToken, this.menu.getCarried());
+        EOFDebug.log(STORAGE_RESULT, "insert result received accepted={} inserted={} sourceSlot={} requestId={} token={} beforeCarried={}", accepted, insertedCount, sourceSlot, requestId, carriedToken, this.menu.getCarried());
 
         long expected = pendingOperation == null ? -1L : pendingOperation.requestId();
-        StorageDebug.log(STORAGE_PENDING, "result requestId={} expected={}", requestId, expected);
+        EOFDebug.log(STORAGE, "result requestId={} expected={}", requestId, expected);
         if (pendingOperation == null || requestId != pendingOperation.requestId()) {
-            StorageDebug.log(STORAGE_RESULT, "ignored stale INSERT requestId={} pendingRequestId={}", requestId, expected);
+            EOFDebug.log(STORAGE_RESULT, "ignored stale INSERT requestId={} pendingRequestId={}", requestId, expected);
             return;
         }
 
         if (pendingOperation.type() != PendingOpType.INSERT && pendingOperation.type() != PendingOpType.QUICK_INSERT) {
-            StorageDebug.log(STORAGE_RESULT, "ignored mismatched INSERT type={}", pendingOperation.type());
+            EOFDebug.log(STORAGE_RESULT, "ignored mismatched INSERT type={}", pendingOperation.type());
             return;
         }
 
@@ -512,13 +525,13 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
     public void handleValidatedPlaceCarriedToInventoryResult(boolean accepted, int placedCount, int targetSlot, long requestId) {
         long expected = pendingOperation == null ? -1L : pendingOperation.requestId();
-        StorageDebug.log(STORAGE_RESULT, "place inventory result requestId={} expected={} accepted={} placed={} beforeCarried={}", requestId, expected, accepted, placedCount, this.menu.getCarried());
+        EOFDebug.log(STORAGE_RESULT, "place inventory result requestId={} expected={} accepted={} placed={} beforeCarried={}", requestId, expected, accepted, placedCount, this.menu.getCarried());
         if (pendingOperation == null || requestId != pendingOperation.requestId()) {
-            StorageDebug.log(STORAGE_RESULT, "ignored stale PLACE_CARRIED_TO_INVENTORY requestId={} pendingRequestId={}", requestId, expected);
+            EOFDebug.log(STORAGE_RESULT, "ignored stale PLACE_CARRIED_TO_INVENTORY requestId={} pendingRequestId={}", requestId, expected);
             return;
         }
         if (pendingOperation.type() != PendingOpType.PLACE_CARRIED_TO_INVENTORY) {
-            StorageDebug.log(STORAGE_RESULT, "ignored mismatched PLACE_CARRIED_TO_INVENTORY type={}", pendingOperation.type());
+            EOFDebug.log(STORAGE_RESULT, "ignored mismatched PLACE_CARRIED_TO_INVENTORY type={}", pendingOperation.type());
             return;
         }
         if (accepted && placedCount > 0) {

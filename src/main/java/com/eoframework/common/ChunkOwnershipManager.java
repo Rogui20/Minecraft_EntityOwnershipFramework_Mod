@@ -1,5 +1,6 @@
 package com.eoframework.common;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import com.eoframework.network.ChunkOwnerSyncS2CPayload;
 import net.minecraft.core.BlockPos;
@@ -130,7 +131,7 @@ public class ChunkOwnershipManager {
             }
         }
 
-        EOFramework.LOGGER.info("[EOF ChunkOwnership] sync dimension={} chunk=({}, {}) owner={} occupied={}", key.dimension.location(), key.x, key.z, owner, state != null ? state.present.size() : 0);
+        EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, "[EOF ChunkOwnership] sync dimension={} chunk=({}, {}) owner={} occupied={}", key.dimension.location(), key.x, key.z, owner, state != null ? state.present.size() : 0);
     }
 
     private static class ChunkOwnershipState {

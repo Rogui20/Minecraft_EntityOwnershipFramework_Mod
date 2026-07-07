@@ -1,5 +1,6 @@
 package com.eoframework.network;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import com.eoframework.common.BlockOwnershipManager;
 import net.minecraft.core.BlockPos;
@@ -48,7 +49,7 @@ public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active, float spe
             var ownerUuid = BlockOwnershipManager.getOrAssignOwner(level, pos, player);
             PacketDistributor.sendToPlayer(player, new ChunkOwnerSyncS2CPayload(level.dimension().location().toString(), pos.getX() >> 4, pos.getZ() >> 4, ownerUuid));
 
-            EOFramework.LOGGER.info(
+            EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, 
                     "[EOF BlockBreakAssist] assist received requester={} owner={} pos={} speed={} active={}",
                     player.getUUID(),
                     ownerUuid,
@@ -58,7 +59,7 @@ public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active, float spe
             );
 
             if (existingOwnerUuid == null) {
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, 
                         "[EOF BlockBreakAssist] assigned owner pos={} owner={} requester={}",
                         pos,
                         ownerUuid,
@@ -69,7 +70,7 @@ public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active, float spe
             if (ownerUuid.equals(player.getUUID())) return;
 
             if (player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D) > 8.0D * 8.0D) {
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, 
                         "[EOF BlockBreakAssist] reject requester too far pos={} owner={} requester={}",
                         pos,
                         ownerUuid,
@@ -80,7 +81,7 @@ public record BlockBreakAssistC2SPayload(BlockPos pos, boolean active, float spe
 
             ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerUuid);
             if (owner == null) {
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, 
                         "[EOF BlockBreakAssist] owner offline/invalid pos={} owner={} requester={}",
                         pos,
                         ownerUuid,

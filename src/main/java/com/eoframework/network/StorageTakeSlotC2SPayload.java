@@ -1,5 +1,6 @@
 package com.eoframework.network;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.common.StorageOwnershipManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -48,7 +49,7 @@ public record StorageTakeSlotC2SPayload(
     public static void handle(StorageTakeSlotC2SPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)) return;
-            EOFramework.LOGGER.info("[EOF Storage] server received take request player={} pos={} slot={} requestId={}",
+            EOFDebug.log(EOFDebug.Flag.STORAGE, "[EOF Storage] server received take request player={} pos={} slot={} requestId={}",
                     player.getGameProfile().getName(), payload.pos(), payload.slot(), payload.requestId());
             StorageOwnershipManager.takeSlotForNonOwner(
                     player.serverLevel(),

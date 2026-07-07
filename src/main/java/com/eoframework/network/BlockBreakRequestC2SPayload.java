@@ -1,5 +1,6 @@
 package com.eoframework.network;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import com.eoframework.common.BlockOwnershipManager;
 import net.minecraft.core.BlockPos;
@@ -56,7 +57,7 @@ public record BlockBreakRequestC2SPayload(
 
             PacketDistributor.sendToPlayer(player, new ChunkOwnerSyncS2CPayload(level.dimension().location().toString(), pos.getX() >> 4, pos.getZ() >> 4, ownerUuid));
 
-            EOFramework.LOGGER.info(
+            EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, 
                     "[EOF BlockBreakRequest] pos={} owner={} requester={} requesterIsOwner={} clientSpawnedDrops={}",
                     pos,
                     ownerUuid,
@@ -66,7 +67,7 @@ public record BlockBreakRequestC2SPayload(
             );
 
             if (existingOwnerUuid == null) {
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, 
                         "[EOF BlockBreakRequest] assigned owner pos={} owner={} requester={}",
                         pos,
                         ownerUuid,
@@ -75,7 +76,7 @@ public record BlockBreakRequestC2SPayload(
             }
 
             if (!requesterIsOwner && player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D) > 8.0D * 8.0D) {
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, 
                         "[EOF BlockBreakRequest] reject non-owner requester too far pos={} owner={} requester={}",
                         pos,
                         ownerUuid,
@@ -86,7 +87,7 @@ public record BlockBreakRequestC2SPayload(
 
             if (requesterIsOwner && !payload.clientSpawnedDrops()
                     && player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D) > 8.0D * 8.0D) {
-                EOFramework.LOGGER.info(
+                EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, 
                         "[EOF BlockBreakRequest] reject owner physical break too far pos={} owner={} requester={}",
                         pos,
                         ownerUuid,
@@ -100,7 +101,7 @@ public record BlockBreakRequestC2SPayload(
 
                 if (owner != null) {
                     PacketDistributor.sendToPlayer(owner, new ChunkOwnerSyncS2CPayload(level.dimension().location().toString(), pos.getX() >> 4, pos.getZ() >> 4, ownerUuid));
-                    EOFramework.LOGGER.info(
+                    EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, 
                             "[EOF BlockBreakRequest] forwarding to owner pos={} owner={} requester={} clientSpawnedDrops={}",
                             pos,
                             ownerUuid,
@@ -116,7 +117,7 @@ public record BlockBreakRequestC2SPayload(
                             )
                     );
                 } else {
-                    EOFramework.LOGGER.info(
+                    EOFDebug.log(EOFDebug.Flag.BLOCK_BREAK, 
                             "[EOF BlockBreakRequest] owner offline/invalid for pos={} owner={} requester={}",
                             pos,
                             ownerUuid,

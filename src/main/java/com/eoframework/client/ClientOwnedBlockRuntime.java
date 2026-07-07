@@ -1,5 +1,6 @@
 package com.eoframework.client;
 
+import com.eoframework.common.EOFDebug;
 import com.eoframework.EOFramework;
 import com.eoframework.network.BlockBreakRequestC2SPayload;
 import com.eoframework.network.BlockPlaceRequestC2SPayload;
@@ -70,7 +71,7 @@ public class ClientOwnedBlockRuntime {
         boolean isOwner = mc.player != null && mc.level != null
                 && owner != null && owner.equals(playerUuid);
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, 
                 "[EOF BlockBreak] method={} action={} pos={} knownOwner={} player={} isOwner={}",
                 method,
                 cancelled ? "cancel" : "allow",
@@ -96,7 +97,7 @@ public class ClientOwnedBlockRuntime {
         } else {
             CHUNK_OWNERS.put(key, owner);
         }
-        EOFramework.LOGGER.info("[EOF ChunkOwnerSync] dimension={} chunk=({}, {}) owner={}", dimension, chunkX, chunkZ, owner);
+        EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, "[EOF ChunkOwnerSync] dimension={} chunk=({}, {}) owner={}", dimension, chunkX, chunkZ, owner);
     }
 
     public static void requestPlace(BlockPos pos, Direction face, ItemStack stack) {
@@ -121,7 +122,7 @@ public class ClientOwnedBlockRuntime {
         UUID owner = getKnownCellOwner(pos);
 
         if (!isKnownCellOwnedByMe(pos)) {
-            EOFramework.LOGGER.info(
+            EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, 
                     "[EOF spawnOwnerDrops] skip non-owner pos={} owner={} executor={}",
                     pos,
                     owner,
@@ -130,7 +131,7 @@ public class ClientOwnedBlockRuntime {
             return false;
         }
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, 
                 "[EOF spawnOwnerDrops] execute pos={} owner={} executor={}",
                 pos,
                 owner,
@@ -172,7 +173,7 @@ public class ClientOwnedBlockRuntime {
         if (mc.level == null || mc.player == null) return;
 
         if (!isKnownCellOwnedByMe(pos)) {
-            EOFramework.LOGGER.info(
+            EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, 
                     "[EOF RemoteBreakRequest] skip non-owner pos={} owner={} requester={} executor={}",
                     pos,
                     getKnownCellOwner(pos),
@@ -182,7 +183,7 @@ public class ClientOwnedBlockRuntime {
             return;
         }
 
-        EOFramework.LOGGER.info(
+        EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, 
                 "[EOF RemoteBreakRequest] owner handling pos={} owner={} requester={} executor={}",
                 pos,
                 getKnownCellOwner(pos),
