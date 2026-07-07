@@ -10,6 +10,7 @@ public final class EOFDebug {
         STORAGE,
         STORAGE_CLICK,
         STORAGE_CURSOR,
+        STORAGE_PENDING,
         STORAGE_TAKE,
         STORAGE_INSERT,
         STORAGE_RESULT,
