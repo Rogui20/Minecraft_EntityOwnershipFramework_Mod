@@ -13,7 +13,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record StorageSlotResultS2CPayload(
         boolean accepted,
         boolean quickMove,
-        ItemStack stack
+        ItemStack stack,
+        long requestId
 ) implements CustomPacketPayload {
     public static final Type<StorageSlotResultS2CPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(EOFramework.MODID, "storage_slot_result_s2c"));
@@ -25,7 +26,8 @@ public record StorageSlotResultS2CPayload(
                     return new StorageSlotResultS2CPayload(
                             buf.readBoolean(),
                             buf.readBoolean(),
-                            ItemStack.OPTIONAL_STREAM_CODEC.decode(buf)
+                            ItemStack.OPTIONAL_STREAM_CODEC.decode(buf),
+                            buf.readVarLong()
                     );
                 }
 
@@ -34,6 +36,7 @@ public record StorageSlotResultS2CPayload(
                     buf.writeBoolean(payload.accepted());
                     buf.writeBoolean(payload.quickMove());
                     ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, payload.stack());
+                    buf.writeVarLong(payload.requestId());
                 }
             };
 
@@ -46,12 +49,13 @@ public record StorageSlotResultS2CPayload(
         context.enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
             System.out.println("[EOF StorageResult] accepted="
-                    + payload.accepted() + " quick=" + payload.quickMove() + " stack=" + payload.stack() + " insertedCount=0");
+                    + payload.accepted() + " operation=TAKE quick=" + payload.quickMove() + " stack=" + payload.stack() + " insertedCount=0 requestId=" + payload.requestId());
             if (mc.screen instanceof ClientLocalStorageScreen screen) {
                 screen.handleValidatedTakeResult(
                         payload.accepted(),
                         payload.quickMove(),
-                        payload.stack()
+                        payload.stack(),
+                        payload.requestId()
                 );
             }
         });

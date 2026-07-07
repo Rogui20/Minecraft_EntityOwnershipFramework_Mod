@@ -12,7 +12,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record StorageInsertResultS2CPayload(
         boolean accepted,
         int insertedCount,
-        int sourceSlot
+        int sourceSlot,
+        long requestId
 ) implements CustomPacketPayload {
     public static final Type<StorageInsertResultS2CPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(EOFramework.MODID, "storage_insert_result_s2c"));
@@ -24,7 +25,8 @@ public record StorageInsertResultS2CPayload(
                     return new StorageInsertResultS2CPayload(
                             buf.readBoolean(),
                             buf.readVarInt(),
-                            buf.readVarInt()
+                            buf.readVarInt(),
+                            buf.readVarLong()
                     );
                 }
 
@@ -33,6 +35,7 @@ public record StorageInsertResultS2CPayload(
                     buf.writeBoolean(payload.accepted());
                     buf.writeVarInt(payload.insertedCount());
                     buf.writeVarInt(payload.sourceSlot());
+                    buf.writeVarLong(payload.requestId());
                 }
             };
 
@@ -46,13 +49,14 @@ public record StorageInsertResultS2CPayload(
             Minecraft mc = Minecraft.getInstance();
 
             System.out.println("[EOF StorageResult] accepted="
-                    + payload.accepted() + " quick=false stack=EMPTY insertedCount=" + payload.insertedCount() + " sourceSlot=" + payload.sourceSlot());
+                    + payload.accepted() + " operation=INSERT quick=false stack=EMPTY insertedCount=" + payload.insertedCount() + " sourceSlot=" + payload.sourceSlot() + " requestId=" + payload.requestId());
 
             if (mc.screen instanceof ClientLocalStorageScreen screen) {
                 screen.handleValidatedInsertResult(
                         payload.accepted(),
                         payload.insertedCount(),
-                        payload.sourceSlot()
+                        payload.sourceSlot(),
+                        payload.requestId()
                 );
             }
         });
