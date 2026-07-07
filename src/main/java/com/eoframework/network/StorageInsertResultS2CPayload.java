@@ -11,7 +11,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 public record StorageInsertResultS2CPayload(
         boolean accepted,
-        int insertedCount
+        int insertedCount,
+        int sourceSlot
 ) implements CustomPacketPayload {
     public static final Type<StorageInsertResultS2CPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(EOFramework.MODID, "storage_insert_result_s2c"));
@@ -22,6 +23,7 @@ public record StorageInsertResultS2CPayload(
                 public StorageInsertResultS2CPayload decode(RegistryFriendlyByteBuf buf) {
                     return new StorageInsertResultS2CPayload(
                             buf.readBoolean(),
+                            buf.readVarInt(),
                             buf.readVarInt()
                     );
                 }
@@ -30,6 +32,7 @@ public record StorageInsertResultS2CPayload(
                 public void encode(RegistryFriendlyByteBuf buf, StorageInsertResultS2CPayload payload) {
                     buf.writeBoolean(payload.accepted());
                     buf.writeVarInt(payload.insertedCount());
+                    buf.writeVarInt(payload.sourceSlot());
                 }
             };
 
@@ -42,13 +45,14 @@ public record StorageInsertResultS2CPayload(
         context.enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
 
-            System.out.println("[EOF StorageResult] requester applying insert result accepted="
-                    + payload.accepted() + " inserted=" + payload.insertedCount());
+            System.out.println("[EOF StorageResult] accepted="
+                    + payload.accepted() + " quick=false stack=EMPTY insertedCount=" + payload.insertedCount() + " sourceSlot=" + payload.sourceSlot());
 
             if (mc.screen instanceof ClientLocalStorageScreen screen) {
                 screen.handleValidatedInsertResult(
                         payload.accepted(),
-                        payload.insertedCount()
+                        payload.insertedCount(),
+                        payload.sourceSlot()
                 );
             }
         });

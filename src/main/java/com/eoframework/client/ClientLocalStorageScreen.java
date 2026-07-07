@@ -25,6 +25,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
     private ItemStack pendingInsertStack = ItemStack.EMPTY;
     private int pendingInsertSourceSlot = -1;
     private long ignoreSnapshotsUntilGameTime = 0;
+    private boolean carriedFromValidatedStorage = false;
 
     public ClientLocalStorageScreen(ChestMenu menu, Inventory playerInventory, Component title, BlockPos storagePos, boolean ownerView) {
         super(menu, playerInventory, title);
@@ -77,6 +78,11 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             ItemStack carried = this.menu.getCarried();
 
             if (!carried.isEmpty()) {
+                if (carriedFromValidatedStorage) {
+                    refreshFromCache();
+                    System.out.println("[EOF StorageClient] non-owner canceled vanilla slot=" + slotId + " type=" + type + " carried=" + carried + " reason=storage_to_storage_blocked");
+                    return;
+                }
                 pendingInsertStack = carried.copy();
 
                 PacketDistributor.sendToServer(
@@ -84,7 +90,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 );
 
                 refreshFromCache();
-                System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST insert=true");
+                System.out.println("[EOF StorageClient] non-owner canceled vanilla slot=" + slotId + " type=" + type + " carried=" + carried + " insert=true");
                 return;
             }
 
@@ -94,7 +100,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
             this.menu.setCarried(ItemStack.EMPTY);
             refreshFromCache();
-            System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST quickMove=" + (type == ClickType.QUICK_MOVE));
+            System.out.println("[EOF StorageClient] non-owner canceled vanilla slot=" + slotId + " type=" + type + " carried=" + this.menu.getCarried() + " quickMove=" + (type == ClickType.QUICK_MOVE));
             return;
         }
 
@@ -108,7 +114,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 PacketDistributor.sendToServer(
                         new StorageInsertSlotC2SPayload(storagePos, -1, slotId, storageSlots, invStack.copy())
                 );
-                System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST quickMoveInventoryToStorage=true");
+                System.out.println("[EOF StorageClient] non-owner canceled vanilla slot=" + slotId + " type=" + type + " carried=" + this.menu.getCarried() + " quickMoveInventoryToStorage=true");
             }
 
             refreshFromCache();
@@ -138,6 +144,11 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             ItemStack carried = this.menu.getCarried();
 
             if (!carried.isEmpty()) {
+                if (carriedFromValidatedStorage) {
+                    refreshFromCache();
+                    System.out.println("[EOF StorageClient] non-owner canceled vanilla slot=" + slotId + " type=" + type + " carried=" + carried + " reason=storage_to_storage_blocked");
+                    return;
+                }
                 pendingInsertStack = carried.copy();
 
                 PacketDistributor.sendToServer(
@@ -145,7 +156,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 );
 
                 refreshFromCache();
-                System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST insert=true");
+                System.out.println("[EOF StorageClient] non-owner canceled vanilla slot=" + slotId + " type=" + type + " carried=" + carried + " insert=true");
                 return;
             }
 
@@ -155,13 +166,14 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
             this.menu.setCarried(ItemStack.EMPTY);
             refreshFromCache();
-            System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST quickMove=" + (type == ClickType.QUICK_MOVE));
+            System.out.println("[EOF StorageClient] non-owner canceled vanilla slot=" + slotId + " type=" + type + " carried=" + this.menu.getCarried() + " quickMove=" + (type == ClickType.QUICK_MOVE));
             return;
         }
 
         // Não-owner mexendo no próprio inventário: permitido.
         if (type != ClickType.QUICK_MOVE) {
             super.slotClicked(slot, slotId, mouseButton, type);
+            carriedFromValidatedStorage = false;
             return;
         }
 
@@ -176,7 +188,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 PacketDistributor.sendToServer(
                         new StorageInsertSlotC2SPayload(storagePos, -1, slotId, storageSlots, invStack.copy())
                 );
-                System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST quickMoveInventoryToStorage=true");
+                System.out.println("[EOF StorageClient] non-owner canceled vanilla slot=" + slotId + " type=" + type + " carried=" + this.menu.getCarried() + " quickMoveInventoryToStorage=true");
             }
 
             refreshFromCache();
@@ -292,25 +304,28 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
         if (!accepted || stack.isEmpty()) {
             this.menu.setCarried(ItemStack.EMPTY);
+            carriedFromValidatedStorage = false;
             refreshFromCache();
             return;
         }
 
         if (quickMove) {
             this.menu.setCarried(ItemStack.EMPTY);
+            carriedFromValidatedStorage = false;
             refreshFromCache();
             return;
         }
 
         this.menu.setCarried(stack.copy());
+        carriedFromValidatedStorage = true;
     }
 
-    public void handleValidatedInsertResult(boolean accepted, int insertedCount) {
+    public void handleValidatedInsertResult(boolean accepted, int insertedCount, int sourceSlot) {
         System.out.println("[EOF StorageResult] requester applying insert result accepted="
                 + accepted
-                + " inserted=" + insertedCount);
+                + " inserted=" + insertedCount + " sourceSlot=" + sourceSlot);
 
-        if (accepted && pendingInsertSourceSlot < 0 && !this.menu.getCarried().isEmpty()) {
+        if (accepted && sourceSlot < 0 && !this.menu.getCarried().isEmpty()) {
             ItemStack carried = this.menu.getCarried().copy();
             carried.shrink(insertedCount);
             this.menu.setCarried(carried.isEmpty() ? ItemStack.EMPTY : carried);
@@ -318,6 +333,9 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
         pendingInsertStack = ItemStack.EMPTY;
         pendingInsertSourceSlot = -1;
+        if (accepted) {
+            carriedFromValidatedStorage = false;
+        }
         refreshFromCache();
     }
 
