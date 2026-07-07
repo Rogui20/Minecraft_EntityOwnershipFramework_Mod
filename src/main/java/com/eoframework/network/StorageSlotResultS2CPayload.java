@@ -2,6 +2,9 @@ package com.eoframework.network;
 
 import com.eoframework.EOFramework;
 import com.eoframework.client.ClientLocalStorageScreen;
+import com.eoframework.client.StorageDebug;
+
+import static com.eoframework.client.StorageDebug.Flag.STORAGE_RESULT;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -51,8 +54,7 @@ public record StorageSlotResultS2CPayload(
     public static void handle(StorageSlotResultS2CPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
-            System.out.println("[EOF StorageResult] accepted="
-                    + payload.accepted() + " operation=TAKE quick=" + payload.quickMove() + " stack=" + payload.stack() + " insertedCount=0 requestId=" + payload.requestId() + " token=" + payload.carriedToken());
+            StorageDebug.log(STORAGE_RESULT, "accepted={} operation=TAKE quick={} stack={} insertedCount=0 requestId={} token={}", payload.accepted(), payload.quickMove(), payload.stack(), payload.requestId(), payload.carriedToken());
             if (mc.screen instanceof ClientLocalStorageScreen screen) {
                 screen.handleValidatedTakeResult(
                         payload.accepted(),
