@@ -284,16 +284,15 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
             if (!carriedBefore.isEmpty()) {
                 if (!carriedFromValidatedStorage) {
-                    if (carriedSourceSlot < storageSlots || carriedSourceSlot >= this.menu.slots.size()) {
-                        logDecision("IGNORE", slotId, "NO_SOURCE_SLOT carried=" + carriedBefore);
-                        logDenied("INSERT", -1L, slotId, carriedSourceSlot, storageSlots, menuSlotIdToPlayerInventoryIndex(carriedSourceSlot, storageSlots), "NO_SOURCE_SLOT");
-                        return;
-                    }
-                    logDecision("INSERT", slotId, "inventory_cursor_to_storage");
-                    long requestId = beginPending(PendingOpType.INSERT, slotId, carriedSourceSlot, carriedBefore);
-                    EOFDebug.log(STORAGE_INSERT, "INSERT request token=0 pending={} requestId={} slot={} sourceSlot={} stack={}", pendingOperation, requestId, slotId, carriedSourceSlot, carriedBefore);
-                    PacketDistributor.sendToServer(
-                            new StorageInsertSlotC2SPayload(storagePos, slotId, carriedSourceSlot, storageSlots, carriedBefore.copy(), requestId, 0L)
+                    logDecision("IGNORE", slotId, "UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE carried=" + carriedBefore);
+                    logDenied(
+                            "INSERT",
+                            -1L,
+                            slotId,
+                            carriedSourceSlot,
+                            storageSlots,
+                            menuSlotIdToPlayerInventoryIndex(carriedSourceSlot, storageSlots),
+                            "UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE"
                     );
                     return;
                 }
