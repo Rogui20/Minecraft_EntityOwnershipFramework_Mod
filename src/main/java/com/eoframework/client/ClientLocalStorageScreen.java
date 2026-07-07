@@ -18,7 +18,10 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.eoframework.common.EOFDebug.Flag.*;
@@ -34,6 +37,8 @@ public class ClientLocalStorageScreen extends ContainerScreen {
     private int carriedSourceSlot = -1;
     private long ignoreClicksUntilGameTime = 0L;
     private boolean handlingStorageGuardClick = false;
+    private final Map<Integer, Long> recentlyMovedInventorySlots = new HashMap<>();
+    private static final long QUICK_INSERT_SOURCE_SLOT_BLOCK_TICKS = 8L;
 
     public enum PendingOpType {
         TAKE,
@@ -111,7 +116,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         boolean storageSlot = slotId >= 0 && slotId < storageSlots;
         boolean inventorySlot = slotId >= storageSlots && slotId < this.menu.slots.size();
 
-        boolean carriedValidated = carriedFromValidatedStorage && !this.menu.getCarried().isEmpty();
+        boolean carriedValidated = carriedFromValidatedStorage && currentCarriedToken > 0L && !this.menu.getCarried().isEmpty();
         boolean outsideSlot = slotId == -999 || slotId < 0 || slotId >= this.menu.slots.size();
 
         if (hasPendingOperation()) {
@@ -283,8 +288,8 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             }
 
             if (!carriedBefore.isEmpty()) {
-                if (!carriedFromValidatedStorage) {
-                    logDecision("BLOCK_CURSOR_INVENTORY_TO_STORAGE", slotId, "BLOCKED_UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE carried=" + carriedBefore);
+                if (!carriedFromValidatedStorage || currentCarriedToken <= 0L) {
+                    logDecision("BLOCK_CURSOR_INVENTORY_TO_STORAGE", slotId, "BLOCKED_UNSUPPORTED_INVENTORY_CURSOR_TO_STORAGE carried=" + carriedBefore + " token=" + currentCarriedToken);
                     EOFDebug.log(STORAGE_CLICK, "action=BLOCK_CURSOR_INVENTORY_TO_STORAGE no payload sent");
                     return;
                 }
@@ -314,7 +319,18 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         }
 
         if (type == ClickType.QUICK_MOVE && slotId >= storageSlots && slotId < this.menu.slots.size()) {
-            ItemStack invStack = this.menu.getSlot(slotId).getItem().copy();
+            if (isRecentlyMovedInventorySlot(slotId)) {
+                logDecision("IGNORE", slotId, "recently_moved_quick_insert_source_blocked");
+                return;
+            }
+
+            Slot source = this.menu.getSlot(slotId);
+            if (!source.hasItem()) {
+                logEmptySlotRequest(slotId);
+                return;
+            }
+
+            ItemStack invStack = source.getItem().copy();
             if (invStack.isEmpty()) {
                 logEmptySlotRequest(slotId);
                 return;
@@ -448,6 +464,28 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         EOFDebug.log(STORAGE_PENDING, "clear requestId={} afterCarried={} token={}", requestId, this.menu.getCarried(), currentCarriedToken);
     }
 
+
+    private void pruneRecentlyMovedInventorySlots() {
+        long now = currentGameTime();
+        Iterator<Map.Entry<Integer, Long>> iterator = recentlyMovedInventorySlots.entrySet().iterator();
+        while (iterator.hasNext()) {
+            if (iterator.next().getValue() <= now) {
+                iterator.remove();
+            }
+        }
+    }
+
+    private boolean isRecentlyMovedInventorySlot(int slotId) {
+        pruneRecentlyMovedInventorySlots();
+        return recentlyMovedInventorySlots.containsKey(slotId);
+    }
+
+    private void blockRecentlyMovedInventorySlot(int slotId) {
+        long until = currentGameTime() + QUICK_INSERT_SOURCE_SLOT_BLOCK_TICKS;
+        recentlyMovedInventorySlots.put(slotId, until);
+        EOFDebug.log(STORAGE_PENDING, "quick_insert source slot blocked sourceSlot={} untilTick={} currentTick={}", slotId, until, currentGameTime());
+    }
+
     private void logDenied(String operation, long requestId, int slotId, int sourceSlot, int storageSlots, int invIndex, String reason) {
         EOFDebug.log(STORAGE_RESULT, "denied operation={} requestId={} pendingOperation={} carried={} carriedFromStorageValidated={} carriedToken={} sourceSlot={} storageSlots={} invIndex={} slotId={} reason={}", operation, requestId, pendingOperation, this.menu.getCarried(), carriedFromValidatedStorage, currentCarriedToken, sourceSlot, storageSlots, invIndex, slotId, reason);
     }
@@ -561,6 +599,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         if (hasPendingOperation() && snapshotSlots != getStorageSlotCount()) {
             logDenied(pendingOperation.type().name(), pendingOperation.requestId(), pendingOperation.slotId(), pendingOperation.sourceSlot(), getStorageSlotCount(), menuSlotIdToPlayerInventoryIndex(pendingOperation.slotId(), getStorageSlotCount()), "snapshot_slot_count_changed_to_" + snapshotSlots + "_pending_preserved");
         }
+        recentlyMovedInventorySlots.clear();
         refreshFromCache();
         EOFDebug.log(STORAGE_SNAPSHOT, "client snapshot beforeCarried={} beforeToken={} beforePending={} beforeValidated={} afterCarried={} afterToken={} afterPending={} afterValidated={}",
                 beforeCarried, beforeToken, beforePending, beforeValidated, this.menu.getCarried(), currentCarriedToken, pendingOperation, carriedFromValidatedStorage);
@@ -671,6 +710,15 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             carriedFromValidatedStorage = false;
             currentCarriedToken = 0L;
             carriedSourceSlot = -1;
+            blockRecentlyMovedInventorySlot(sourceSlot);
+            if (sourceSlot >= 0 && sourceSlot < this.menu.slots.size()) {
+                Slot movedSlot = this.menu.getSlot(sourceSlot);
+                ItemStack visualSource = movedSlot.getItem().copy();
+                if (!visualSource.isEmpty()) {
+                    visualSource.shrink(insertedCount);
+                    movedSlot.set(visualSource.isEmpty() ? ItemStack.EMPTY : visualSource);
+                }
+            }
             setCarriedForStorage(ItemStack.EMPTY, "insert_result_accepted_consumed_inventory_cursor");
         }
 
