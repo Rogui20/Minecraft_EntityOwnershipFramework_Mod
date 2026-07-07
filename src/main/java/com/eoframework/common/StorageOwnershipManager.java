@@ -340,9 +340,20 @@ public class StorageOwnershipManager {
                 container.setItem(index, ItemStack.EMPTY);
                 container.setChanged();
 
-                if (quickMove && !requester.getInventory().add(taken.copy())) {
-                    requester.drop(taken.copy(), false);
+                boolean addInventoryResult = true;
+                if (quickMove) {
+                    addInventoryResult = requester.getInventory().add(taken.copy());
+                    if (!addInventoryResult) {
+                        requester.drop(taken.copy(), false);
+                    }
                 }
+                EOFramework.LOGGER.info(
+                        "[EOF StorageTake] requester={} slot={} stack={} addInventoryResult={}",
+                        requester.getGameProfile().getName(),
+                        slot,
+                        taken,
+                        quickMove ? addInventoryResult : "cursor"
+                );
                 requester.getInventory().setChanged();
                 requester.containerMenu.broadcastChanges();
 
@@ -506,10 +517,30 @@ public class StorageOwnershipManager {
 
         PacketDistributor.sendToPlayer(
                 requester,
-                new StorageInsertResultS2CPayload(false, 0)
+                new StorageInsertResultS2CPayload(false, 0, sourceSlot)
         );
 
         return false;
+    }
+
+    private static int menuSlotIdToPlayerInventoryIndex(int menuSlotId, int storageSlots) {
+        if (menuSlotId >= storageSlots && menuSlotId < storageSlots + 27) {
+            return 9 + (menuSlotId - storageSlots);
+        }
+
+        if (menuSlotId >= storageSlots + 27 && menuSlotId < storageSlots + 36) {
+            return menuSlotId - (storageSlots + 27);
+        }
+
+        return -1;
+    }
+
+    private static ItemStack getPlayerInventorySourceStack(ServerPlayer player, int menuSlotId, int storageSlots) {
+        int invIndex = menuSlotIdToPlayerInventoryIndex(menuSlotId, storageSlots);
+        if (invIndex < 0 || invIndex >= player.getInventory().getContainerSize()) {
+            return ItemStack.EMPTY;
+        }
+        return player.getInventory().getItem(invIndex);
     }
 
     private static void removeFromPlayerInventorySlot(
@@ -519,22 +550,7 @@ public class StorageOwnershipManager {
             ItemStack expected,
             int count
     ) {
-        if (menuSlotId < storageSlots) {
-            return;
-        }
-
-        int invIndex = -1;
-
-        // Slots 0-26 do inventário principal.
-        if (menuSlotId >= storageSlots && menuSlotId < storageSlots + 27) {
-            invIndex = 9 + (menuSlotId - storageSlots);
-        }
-
-        // Hotbar.
-        if (menuSlotId >= storageSlots + 27 && menuSlotId < storageSlots + 36) {
-            invIndex = menuSlotId - (storageSlots + 27);
-        }
-
+        int invIndex = menuSlotIdToPlayerInventoryIndex(menuSlotId, storageSlots);
         if (invIndex < 0 || invIndex >= player.getInventory().getContainerSize()) {
             return;
         }
@@ -553,25 +569,7 @@ public class StorageOwnershipManager {
         }
 
         player.getInventory().setChanged();
-
         player.containerMenu.broadcastChanges();
-    }
-
-    private static int menuSlotIdToPlayerInventoryIndex(int menuSlotId) {
-        // Baú 6 linhas: storageSlots=54. Mas aqui precisamos saber rows.
-        // Como sourceSlot veio do menu, o mapeamento genérico é difícil sem rows.
-        // Para baú grande que você está testando:
-        int storageSlots = 54;
-
-        if (menuSlotId >= storageSlots && menuSlotId < storageSlots + 27) {
-            return 9 + (menuSlotId - storageSlots);
-        }
-
-        if (menuSlotId >= storageSlots + 27 && menuSlotId < storageSlots + 36) {
-            return menuSlotId - (storageSlots + 27);
-        }
-
-        return -1;
     }
 
     public static boolean insertSlotForNonOwner(
@@ -600,7 +598,7 @@ public class StorageOwnershipManager {
             if (notifyFailure) {
                 PacketDistributor.sendToPlayer(
                         requester,
-                        new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
+                        new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot)
                 );
             }
             return false;
@@ -611,7 +609,7 @@ public class StorageOwnershipManager {
             if (notifyFailure) {
                 PacketDistributor.sendToPlayer(
                         requester,
-                        new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
+                        new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot)
                 );
             }
             return false;
@@ -628,6 +626,33 @@ public class StorageOwnershipManager {
             );
         }
 
+        int invIndex = menuSlotIdToPlayerInventoryIndex(sourceSlot, storageSlots);
+        ItemStack beforeSource = ItemStack.EMPTY;
+        ItemStack sourceBackedOffer = offered.copy();
+        if (sourceSlot >= 0) {
+            ItemStack actualSource = getPlayerInventorySourceStack(requester, sourceSlot, storageSlots);
+            beforeSource = actualSource.copy();
+            if (actualSource.isEmpty() || !ItemStack.isSameItemSameComponents(actualSource, offered)) {
+                if (notifyFailure) {
+                    PacketDistributor.sendToPlayer(
+                            requester,
+                            new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot)
+                    );
+                }
+                EOFramework.LOGGER.info(
+                        "[EOF StorageInsert] requester={} sourceSlot={} storageSlots={} invIndex={} before={} inserted=0 after={}",
+                        requester.getGameProfile().getName(),
+                        sourceSlot,
+                        storageSlots,
+                        invIndex,
+                        beforeSource,
+                        beforeSource
+                );
+                return false;
+            }
+            sourceBackedOffer = actualSource.copyWithCount(Math.min(offered.getCount(), actualSource.getCount()));
+        }
+
         int index = slot;
 
         for (BlockPos pos : positions) {
@@ -636,7 +661,7 @@ public class StorageOwnershipManager {
 
             if (index < container.getContainerSize()) {
                 ItemStack existing = container.getItem(index);
-                ItemStack toInsert = offered.copy();
+                ItemStack toInsert = sourceBackedOffer.copy();
 
                 int inserted = 0;
 
@@ -661,7 +686,7 @@ public class StorageOwnershipManager {
                     if (notifyFailure) {
                         PacketDistributor.sendToPlayer(
                                 requester,
-                                new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
+                                new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot)
                         );
                     }
                     return false;
@@ -675,7 +700,7 @@ public class StorageOwnershipManager {
                         requester.containerMenu.setCarried(carried.isEmpty() ? ItemStack.EMPTY : carried);
                     }
                 } else {
-                    removeFromPlayerInventorySlot(requester, sourceSlot, storageSlots, offered, inserted);
+                    removeFromPlayerInventorySlot(requester, sourceSlot, storageSlots, sourceBackedOffer, inserted);
                 }
 
                 List<ItemStack> fresh = collectStorageItems(level, positions);
@@ -683,16 +708,21 @@ public class StorageOwnershipManager {
 
                 PacketDistributor.sendToPlayer(
                         requester,
-                        new com.eoframework.network.StorageInsertResultS2CPayload(true, inserted)
+                        new com.eoframework.network.StorageInsertResultS2CPayload(true, inserted, sourceSlot)
                 );
 
+                ItemStack afterSource = sourceSlot >= 0
+                        ? getPlayerInventorySourceStack(requester, sourceSlot, storageSlots).copy()
+                        : requester.containerMenu.getCarried().copy();
                 EOFramework.LOGGER.info(
-                        "[EOF StorageInsert] server validated accepted=true item={} count={} pos={} slot={} player={}",
-                        offered,
+                        "[EOF StorageInsert] requester={} sourceSlot={} storageSlots={} invIndex={} before={} inserted={} after={}",
+                        requester.getGameProfile().getName(),
+                        sourceSlot,
+                        storageSlots,
+                        invIndex,
+                        beforeSource,
                         inserted,
-                        clickedPos,
-                        slot,
-                        requester.getGameProfile().getName()
+                        afterSource
                 );
 
                 return true;
@@ -704,7 +734,7 @@ public class StorageOwnershipManager {
         if (notifyFailure) {
             PacketDistributor.sendToPlayer(
                     requester,
-                    new com.eoframework.network.StorageInsertResultS2CPayload(false, 0)
+                    new com.eoframework.network.StorageInsertResultS2CPayload(false, 0, sourceSlot)
             );
         }
 
