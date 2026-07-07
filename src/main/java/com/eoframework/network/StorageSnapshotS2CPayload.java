@@ -79,7 +79,7 @@ public record StorageSnapshotS2CPayload(
 
             if (mc.screen instanceof ClientLocalStorageScreen screen
                     && screen.isForStorageLoose(payload.canonicalStoragePos())) {
-                screen.refreshFromCache();
+                screen.handleSnapshotReceived(payload.items().size());
             }
         });
     }

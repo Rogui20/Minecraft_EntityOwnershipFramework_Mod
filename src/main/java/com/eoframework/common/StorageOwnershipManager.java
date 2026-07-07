@@ -2,6 +2,7 @@ package com.eoframework.common;
 
 import com.eoframework.EOFramework;
 import com.eoframework.network.StorageInsertResultS2CPayload;
+import com.eoframework.network.StoragePlaceCarriedToInventoryResultS2CPayload;
 import com.eoframework.network.StorageSnapshotS2CPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -765,6 +766,82 @@ public class StorageOwnershipManager {
         }
 
         return false;
+    }
+
+    public static boolean placeCarriedToInventoryForNonOwner(
+            ServerLevel level,
+            BlockPos clickedPos,
+            ServerPlayer requester,
+            int targetSlot,
+            int storageSlots,
+            ItemStack offered,
+            long requestId
+    ) {
+        int invIndex = menuSlotIdToPlayerInventoryIndex(targetSlot, storageSlots);
+        String requesterName = requester.getGameProfile().getName();
+
+        if (offered.isEmpty() || invIndex < 0 || invIndex >= requester.getInventory().getContainerSize()) {
+            logPlaceInventoryDenied(requestId, requesterName, targetSlot, -1, storageSlots, invIndex, requester.containerMenu.getCarried(), offered, "empty_offered_or_bad_inventory_slot");
+            PacketDistributor.sendToPlayer(requester, new StoragePlaceCarriedToInventoryResultS2CPayload(false, 0, targetSlot, requestId));
+            return false;
+        }
+
+        if (isOwner(level, clickedPos, requester)) {
+            logPlaceInventoryDenied(requestId, requesterName, targetSlot, -1, storageSlots, invIndex, requester.containerMenu.getCarried(), offered, "owner_cannot_use_non_owner_path");
+            PacketDistributor.sendToPlayer(requester, new StoragePlaceCarriedToInventoryResultS2CPayload(false, 0, targetSlot, requestId));
+            return false;
+        }
+
+        ItemStack existing = requester.getInventory().getItem(invIndex);
+        int placed;
+        if (existing.isEmpty()) {
+            placed = Math.min(offered.getCount(), offered.getMaxStackSize());
+            requester.getInventory().setItem(invIndex, offered.copyWithCount(placed));
+        } else if (ItemStack.isSameItemSameComponents(existing, offered)) {
+            int room = Math.min(existing.getMaxStackSize(), requester.getInventory().getMaxStackSize()) - existing.getCount();
+            placed = Math.min(room, offered.getCount());
+            if (placed <= 0) {
+                logPlaceInventoryDenied(requestId, requesterName, targetSlot, -1, storageSlots, invIndex, requester.containerMenu.getCarried(), offered, "target_full");
+                PacketDistributor.sendToPlayer(requester, new StoragePlaceCarriedToInventoryResultS2CPayload(false, 0, targetSlot, requestId));
+                return false;
+            }
+            existing.grow(placed);
+            requester.getInventory().setItem(invIndex, existing);
+        } else {
+            logPlaceInventoryDenied(requestId, requesterName, targetSlot, -1, storageSlots, invIndex, requester.containerMenu.getCarried(), offered, "target_mismatch");
+            PacketDistributor.sendToPlayer(requester, new StoragePlaceCarriedToInventoryResultS2CPayload(false, 0, targetSlot, requestId));
+            return false;
+        }
+
+        requester.getInventory().setChanged();
+        requester.containerMenu.broadcastChanges();
+        PacketDistributor.sendToPlayer(requester, new StoragePlaceCarriedToInventoryResultS2CPayload(true, placed, targetSlot, requestId));
+        EOFramework.LOGGER.info(
+                "[EOF StoragePlaceInventory] operation=PLACE_CARRIED_TO_INVENTORY requestId={} pendingOperation=server carried={} carriedFromStorageValidated=server_validated_cursor sourceSlot=-1 storageSlots={} invIndex={} targetSlot={} requester={} placed={} accepted=true reason=placed",
+                requestId,
+                requester.containerMenu.getCarried(),
+                storageSlots,
+                invIndex,
+                targetSlot,
+                requesterName,
+                placed
+        );
+        return true;
+    }
+
+    private static void logPlaceInventoryDenied(long requestId, String requesterName, int targetSlot, int sourceSlot, int storageSlots, int invIndex, ItemStack carried, ItemStack offered, String reason) {
+        EOFramework.LOGGER.info(
+                "[EOF StorageDeny] operation=PLACE_CARRIED_TO_INVENTORY requestId={} pendingOperation=server carried={} carriedFromStorageValidated=server_validated_cursor sourceSlot={} storageSlots={} invIndex={} targetSlot={} requester={} offered={} reason={}",
+                requestId,
+                carried,
+                sourceSlot,
+                storageSlots,
+                invIndex,
+                targetSlot,
+                requesterName,
+                offered,
+                reason
+        );
     }
 
     private static class StorageSession {

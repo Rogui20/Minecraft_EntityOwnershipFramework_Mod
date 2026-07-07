@@ -21,6 +21,9 @@ public class ClientTick {
         if (mc.level == null || mc.player == null) return;
         ClientAuthEntities.tickClientAuthPickups();
         ClientBlockBreakRuntime.tickOwnerAssists();
+        if (mc.screen instanceof ClientLocalStorageScreen screen) {
+            screen.tickPendingTimeout();
+        }
         tickCounter++;
         if (tickCounter % 20 != 0) return;
     }

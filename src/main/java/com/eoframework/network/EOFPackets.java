@@ -87,6 +87,18 @@ public class EOFPackets {
         );
 
         registrar.playToServer(
+                StoragePlaceCarriedToInventoryC2SPayload.TYPE,
+                StoragePlaceCarriedToInventoryC2SPayload.STREAM_CODEC,
+                StoragePlaceCarriedToInventoryC2SPayload::handle
+        );
+
+        registrar.playToClient(
+                StoragePlaceCarriedToInventoryResultS2CPayload.TYPE,
+                StoragePlaceCarriedToInventoryResultS2CPayload.STREAM_CODEC,
+                StoragePlaceCarriedToInventoryResultS2CPayload::handle
+        );
+
+        registrar.playToServer(
                 BlockBreakRequestC2SPayload.TYPE,
                 BlockBreakRequestC2SPayload.STREAM_CODEC,
                 BlockBreakRequestC2SPayload::handle
