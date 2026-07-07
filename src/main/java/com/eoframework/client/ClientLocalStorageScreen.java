@@ -121,7 +121,10 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             return storageSlot || inventorySlot || outsideSlot || type == ClickType.QUICK_MOVE || type == ClickType.PICKUP_ALL;
         }
 
+        boolean inventoryCursorPickup = inventorySlot && type == ClickType.PICKUP && !carriedValidated;
+
         return storageSlot
+                || inventoryCursorPickup
                 || (type == ClickType.QUICK_MOVE && menuSlot)
                 || (inventorySlot && carriedValidated)
                 || (outsideSlot && carriedValidated);
@@ -129,7 +132,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
     public void handleNonOwnerValidatedClick(Slot slot, int slotId, int mouseButton, ClickType type) {
         logClickEntry(slot, slotId, mouseButton, type);
-        handleNonOwnerStorageClick(slotId, type);
+        handleNonOwnerStorageClick(slotId, type, mouseButton);
     }
 
     @Override
@@ -181,7 +184,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             return;
         }
 
-        handleNonOwnerStorageClick(slotId, type);
+        handleNonOwnerStorageClick(slotId, type, mouseButton);
     }
 
     private void logClickEntry(Slot slot, int slotId, int mouseButton, ClickType type) {
@@ -219,7 +222,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 ignoreClicksUntilGameTime, currentGameTime(), this.menu.getCarried(), currentCarriedToken, pendingOperation);
     }
 
-    private void handleNonOwnerStorageClick(int slotId, ClickType type) {
+    private void handleNonOwnerStorageClick(int slotId, ClickType type, int mouseButton) {
         int storageSlots = getStorageSlotCount();
         ItemStack carriedBefore = this.menu.getCarried().copy();
 
@@ -294,6 +297,11 @@ public class ClientLocalStorageScreen extends ContainerScreen {
             return;
         }
 
+        if (type == ClickType.PICKUP && slotId >= storageSlots && slotId < this.menu.slots.size() && !carriedFromValidatedStorage) {
+            handleInventoryCursorClick(slotId, mouseButton);
+            return;
+        }
+
         if (type == ClickType.QUICK_MOVE && slotId >= storageSlots && slotId < this.menu.slots.size()) {
             ItemStack invStack = this.menu.getSlot(slotId).getItem().copy();
             if (invStack.isEmpty()) {
@@ -321,6 +329,35 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
         if ((slotId == -999 || slotId < 0 || slotId >= this.menu.slots.size()) && carriedFromValidatedStorage && !carriedBefore.isEmpty()) {
             logDecision("IGNORE", slotId, "validated_carried_outside_slot_no_drop");
+        }
+    }
+
+    private void handleInventoryCursorClick(int slotId, int mouseButton) {
+        if (this.minecraft == null || this.minecraft.player == null) {
+            logDenied("INVENTORY_CURSOR", -1L, slotId, carriedSourceSlot, getStorageSlotCount(), menuSlotIdToPlayerInventoryIndex(slotId, getStorageSlotCount()), "missing_client_player");
+            return;
+        }
+
+        int storageSlots = getStorageSlotCount();
+        ItemStack beforeCarried = this.menu.getCarried().copy();
+        ItemStack beforeSlot = this.menu.getSlot(slotId).getItem().copy();
+        this.menu.clicked(slotId, mouseButton, ClickType.PICKUP, this.minecraft.player);
+        ItemStack afterCarried = this.menu.getCarried().copy();
+
+        if (afterCarried.isEmpty()) {
+            carriedFromValidatedStorage = false;
+            carriedSourceSlot = -1;
+            currentCarriedToken = 0L;
+            EOFDebug.log(STORAGE_CURSOR, "inventory cursor source cleared sourceSlot={} beforeCarried={} beforeSlot={}", slotId, beforeCarried, beforeSlot);
+            return;
+        }
+
+        if (beforeCarried.isEmpty() && !beforeSlot.isEmpty() && ItemStack.isSameItemSameComponents(beforeSlot, afterCarried)) {
+            carriedFromValidatedStorage = false;
+            carriedSourceSlot = slotId;
+            currentCarriedToken = 0L;
+            EOFDebug.log(STORAGE_CURSOR, "inventory cursor source captured sourceSlot={} invIndex={} carried={}",
+                    carriedSourceSlot, menuSlotIdToPlayerInventoryIndex(carriedSourceSlot, storageSlots), afterCarried);
         }
     }
 
