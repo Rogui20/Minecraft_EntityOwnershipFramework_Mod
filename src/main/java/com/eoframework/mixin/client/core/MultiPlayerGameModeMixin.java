@@ -71,32 +71,37 @@ public abstract class MultiPlayerGameModeMixin {
         BlockPos canonicalPos = eof$canonicalStoragePos(clickedPos, clickedState);
         UUID owner = ClientOwnedBlockRuntime.getKnownCellOwner(canonicalPos);
         UUID local = player.getUUID();
-        boolean ownerView = owner != null && owner.equals(local);
         boolean hasCache = ClientStorageCache.has(canonicalPos);
+        boolean ownerView = owner != null ? owner.equals(local) : ClientStorageCache.isOwner(canonicalPos);
 
         EOFramework.LOGGER.info(
-                "[EOF StorageOpen] clickedPos={} canonicalPos={} owner={} local={} ownerView={} hasCache={}",
+                "[EOF StorageOpenAttempt] clicked={} canonical={} ownerView={} hasCache={} screenClass={}",
                 clickedPos,
                 canonicalPos,
-                owner,
-                local,
                 ownerView,
-                hasCache
+                hasCache,
+                mc.screen == null ? "null" : mc.screen.getClass().getName()
         );
 
-        if (!ownerView) return;
-
-        boolean opened = ClientLocalStorageOpener.openCachedStorage(canonicalPos, clickedState.getBlock().getName(), true);
-        EOFramework.LOGGER.info(
-                "[EOF StorageOpen] local open {} reason={}",
-                opened ? "success" : "fail",
-                opened ? "opened_cached_storage" : (hasCache ? "open_cached_storage_failed" : "missing_cache")
-        );
-
-        if (opened) {
-            cir.setReturnValue(InteractionResult.SUCCESS);
-            cir.cancel();
+        if (!hasCache) {
+            EOFramework.LOGGER.info(
+                    "[EOF StorageOpenAttempt] missing cache for canonical={} ownerView={} allowing vanilla fallback temporarily",
+                    canonicalPos,
+                    ownerView
+            );
+            return;
         }
+
+        boolean opened = ClientLocalStorageOpener.openCachedStorage(canonicalPos, clickedState.getBlock().getName(), ownerView);
+        EOFramework.LOGGER.info(
+                "[EOF StorageOpenResult] opened {} ownerView={} screenClass={}",
+                opened ? "ClientLocalStorageScreen" : "failed",
+                ownerView,
+                mc.screen == null ? "null" : mc.screen.getClass().getName()
+        );
+
+        cir.setReturnValue(InteractionResult.SUCCESS);
+        cir.cancel();
     }
 
     @Inject(method = "performUseItemOn", at = @At("HEAD"), cancellable = true)
