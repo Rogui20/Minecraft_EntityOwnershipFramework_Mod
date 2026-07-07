@@ -23,7 +23,13 @@ public class AbstractContainerMenuStorageMixin {
     ) {
         Minecraft mc = Minecraft.getInstance();
 
-        if (!(mc.screen instanceof ClientLocalStorageScreen screen)) return;
+        if (!(mc.screen instanceof ClientLocalStorageScreen screen) || screen.isOwnerView()) return;
+
+        if (screen.isHandlingStorageGuardClick()) {
+            screen.logStorageGuardRecursionBlocked("AbstractContainerMenu.clicked", slotId, clickType);
+            ci.cancel();
+            return;
+        }
 
         boolean cancel = screen.shouldBlockVanillaClick(slotId, clickType);
         ItemStack beforeCarried = ((AbstractContainerMenu) (Object) this).getCarried().copy();
