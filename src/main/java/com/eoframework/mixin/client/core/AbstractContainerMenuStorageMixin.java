@@ -23,12 +23,12 @@ public class AbstractContainerMenuStorageMixin {
         Minecraft mc = Minecraft.getInstance();
 
         if (!(mc.screen instanceof ClientLocalStorageScreen screen)) return;
-        if (screen.isOwnerView()) return;
+        if (!screen.shouldBlockVanillaClick(slotId, clickType)) return;
 
-        int storageSlots = screen.getStorageSlotCount();
-
-        if ((slotId >= 0 && slotId < storageSlots) || clickType == ClickType.QUICK_MOVE) {
-            ci.cancel();
-        }
+        System.out.println("[EOF StorageGuard] AbstractContainerMenu local mutation canceled slot="
+                + slotId
+                + " type="
+                + clickType);
+        ci.cancel();
     }
 }

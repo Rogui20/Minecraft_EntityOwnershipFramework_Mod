@@ -23,8 +23,15 @@ public class MultiPlayerGameModeStorageClickMixin {
     ) {
         Minecraft mc = Minecraft.getInstance();
 
-        if (mc.screen instanceof ClientLocalStorageScreen screen && !screen.isOwnerView()) {
-            ci.cancel();
-        }
+        if (!(mc.screen instanceof ClientLocalStorageScreen screen)) return;
+        if (!screen.shouldBlockVanillaClick(slotId, clickType)) return;
+
+        System.out.println("[EOF StorageGuard] MultiPlayerGameMode.handleInventoryMouseClick canceled containerId="
+                + containerId
+                + " slot="
+                + slotId
+                + " type="
+                + clickType);
+        ci.cancel();
     }
 }
