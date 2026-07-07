@@ -400,7 +400,8 @@ public class StorageOwnershipManager {
             int slot,
             boolean accepted,
             boolean quickMove,
-            ItemStack stack
+            ItemStack stack,
+            long requestId
     ) {
         if (!isOwner(level, clickedPos, owner)) {
             return;
@@ -421,17 +422,18 @@ public class StorageOwnershipManager {
                             false,
                             quickMove,
                             ItemStack.EMPTY,
-                            0L
+                            requestId
                     )
             );
 
             return;
         }
 
-        ItemStack copy = stack.copy();
-
-        if (!requester.getInventory().add(copy)) {
-            requester.drop(copy, false);
+        if (quickMove) {
+            ItemStack copy = stack.copy();
+            if (!requester.getInventory().add(copy)) {
+                requester.drop(copy, false);
+            }
         }
 
         PacketDistributor.sendToPlayer(
@@ -440,7 +442,7 @@ public class StorageOwnershipManager {
                         true,
                         quickMove,
                         stack.copy(),
-                        0L
+                        requestId
                 )
         );
 

@@ -16,7 +16,8 @@ public record StorageSlotRequestS2CPayload(
         UUID requester,
         BlockPos pos,
         int slot,
-        boolean quickMove
+        boolean quickMove,
+        long requestId
 ) implements CustomPacketPayload {
     public static final Type<StorageSlotRequestS2CPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(EOFramework.MODID, "storage_slot_request_s2c"));
@@ -29,7 +30,8 @@ public record StorageSlotRequestS2CPayload(
                             buf.readUUID(),
                             BlockPos.STREAM_CODEC.decode(buf),
                             buf.readVarInt(),
-                            buf.readBoolean()
+                            buf.readBoolean(),
+                            buf.readVarLong()
                     );
                 }
 
@@ -39,6 +41,7 @@ public record StorageSlotRequestS2CPayload(
                     BlockPos.STREAM_CODEC.encode(buf, payload.pos());
                     buf.writeVarInt(payload.slot());
                     buf.writeBoolean(payload.quickMove());
+                    buf.writeVarLong(payload.requestId());
                 }
             };
 
@@ -56,7 +59,8 @@ public record StorageSlotRequestS2CPayload(
                 screen.handleRemoteTakeRequest(
                         payload.requester(),
                         payload.slot(),
-                        payload.quickMove()
+                        payload.quickMove(),
+                        payload.requestId()
                 );
             }
         });
