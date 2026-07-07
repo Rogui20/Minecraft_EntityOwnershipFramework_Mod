@@ -5,12 +5,13 @@
   "mixins": [
     "common.ServerPlayerGameModeMixin",
     "common.ServerPlayerGameModeOwnershipMixin"
-
   ],
   "client": [
     "client.core.ClientPacketListenerMixin",
-    "client.core.MultiPlayerGameModeMixin"
-
+    "client.core.MultiPlayerGameModeMixin",
+    "client.core.ClientLocalStorageScreenStorageGuardMixin",
+    "client.core.MultiPlayerGameModeStorageClickMixin",
+    "client.core.AbstractContainerMenuStorageMixin"
   ],
   "injectors": {
     "defaultRequire": 1

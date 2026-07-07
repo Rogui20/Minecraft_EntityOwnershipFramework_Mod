@@ -62,6 +62,63 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         }
     }
 
+    public boolean shouldBlockVanillaClick(int slotId, ClickType type) {
+        if (ownerView) return false;
+
+        int storageSlots = getStorageSlotCount();
+        return (slotId >= 0 && slotId < storageSlots)
+                || (type == ClickType.QUICK_MOVE && slotId >= 0);
+    }
+
+    public void handleNonOwnerValidatedClick(Slot slot, int slotId, int mouseButton, ClickType type) {
+        int storageSlots = getStorageSlotCount();
+
+        if (slotId >= 0 && slotId < storageSlots) {
+            ItemStack carried = this.menu.getCarried();
+
+            if (!carried.isEmpty()) {
+                pendingInsertStack = carried.copy();
+
+                PacketDistributor.sendToServer(
+                        new StorageInsertSlotC2SPayload(storagePos, slotId, -1, storageSlots, carried.copy())
+                );
+
+                refreshFromCache();
+                System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST insert=true");
+                return;
+            }
+
+            PacketDistributor.sendToServer(
+                    new StorageTakeSlotC2SPayload(storagePos, slotId, type == ClickType.QUICK_MOVE)
+            );
+
+            this.menu.setCarried(ItemStack.EMPTY);
+            refreshFromCache();
+            System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST quickMove=" + (type == ClickType.QUICK_MOVE));
+            return;
+        }
+
+        if (type == ClickType.QUICK_MOVE && slotId >= storageSlots) {
+            ItemStack invStack = this.menu.getSlot(slotId).getItem();
+
+            if (!invStack.isEmpty()) {
+                pendingInsertStack = invStack.copy();
+                pendingInsertSourceSlot = slotId;
+
+                PacketDistributor.sendToServer(
+                        new StorageInsertSlotC2SPayload(storagePos, -1, slotId, storageSlots, invStack.copy())
+                );
+                System.out.println("[EOF StorageClick] ownerView=false slot=" + slotId + " type=" + type + " action=CANCEL_LOCAL_SEND_REQUEST quickMoveInventoryToStorage=true");
+            }
+
+            refreshFromCache();
+            return;
+        }
+
+        this.menu.setCarried(ItemStack.EMPTY);
+        refreshFromCache();
+    }
+
     @Override
     protected void slotClicked(Slot slot, int slotId, int mouseButton, ClickType type) {
         int storageSlots = this.menu.getRowCount() * 9;
