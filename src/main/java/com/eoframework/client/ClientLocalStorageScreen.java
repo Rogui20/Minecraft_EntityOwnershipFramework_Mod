@@ -31,6 +31,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
     private long nextStorageRequestId = 1;
     private PendingOperation pendingOperation;
     private long currentCarriedToken = 0L;
+    private int carriedSourceSlot = -1;
     private long ignoreClicksUntilGameTime = 0L;
 
     public enum PendingOpType {
@@ -162,9 +163,20 @@ public class ClientLocalStorageScreen extends ContainerScreen {
                 logDecision("IGNORE", slotId, "validated_carried_invalid_or_outside_slot");
                 return;
             }
+            ItemStack beforeCarried = this.menu.getCarried().copy();
+            ItemStack beforeSlot = slotId >= 0 && slotId < this.menu.slots.size() ? this.menu.getSlot(slotId).getItem().copy() : ItemStack.EMPTY;
             super.slotClicked(slot, slotId, mouseButton, type);
-            if (this.menu.getCarried().isEmpty()) {
+            ItemStack afterCarried = this.menu.getCarried().copy();
+            if (afterCarried.isEmpty()) {
                 carriedFromValidatedStorage = false;
+                carriedSourceSlot = -1;
+            } else if (beforeCarried.isEmpty() && slotId >= storageSlots && slotId < this.menu.slots.size()
+                    && !beforeSlot.isEmpty() && ItemStack.isSameItemSameComponents(beforeSlot, afterCarried)) {
+                carriedFromValidatedStorage = false;
+                carriedSourceSlot = slotId;
+                currentCarriedToken = 0L;
+                EOFDebug.log(STORAGE_CURSOR, "inventory cursor source captured sourceSlot={} invIndex={} carried={}",
+                        carriedSourceSlot, menuSlotIdToPlayerInventoryIndex(carriedSourceSlot, storageSlots), afterCarried);
             }
             return;
         }
@@ -249,7 +261,17 @@ public class ClientLocalStorageScreen extends ContainerScreen {
 
             if (!carriedBefore.isEmpty()) {
                 if (!carriedFromValidatedStorage) {
-                    logDecision("IGNORE", slotId, "UNSUPPORTED_CURSOR_FROM_INVENTORY carried=" + carriedBefore);
+                    if (carriedSourceSlot < storageSlots || carriedSourceSlot >= this.menu.slots.size()) {
+                        logDecision("IGNORE", slotId, "NO_SOURCE_SLOT carried=" + carriedBefore);
+                        logDenied("INSERT", -1L, slotId, carriedSourceSlot, storageSlots, menuSlotIdToPlayerInventoryIndex(carriedSourceSlot, storageSlots), "NO_SOURCE_SLOT");
+                        return;
+                    }
+                    logDecision("INSERT", slotId, "inventory_cursor_to_storage");
+                    long requestId = beginPending(PendingOpType.INSERT, slotId, carriedSourceSlot, carriedBefore);
+                    EOFDebug.log(STORAGE_INSERT, "INSERT request token=0 pending={} requestId={} slot={} sourceSlot={} stack={}", pendingOperation, requestId, slotId, carriedSourceSlot, carriedBefore);
+                    PacketDistributor.sendToServer(
+                            new StorageInsertSlotC2SPayload(storagePos, slotId, carriedSourceSlot, storageSlots, carriedBefore.copy(), requestId, 0L)
+                    );
                     return;
                 }
                 logDecision("INSERT", slotId, "validated_cursor_to_storage");
@@ -527,6 +549,7 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         setCarriedForStorage(stack.copy(), "take_result_accepted");
         carriedFromValidatedStorage = true;
         currentCarriedToken = carriedToken;
+        carriedSourceSlot = -1;
         startPostTakeCooldown();
         EOFDebug.log(STORAGE_TAKE, "client received token={} requestId={} stack={}", carriedToken, requestId, stack);
         EOFDebug.log(STORAGE_RESULT, "requester applied result accepted={} quick={} stack={} beforeCarried={} afterCarried={} token={} pending={} carriedFromStorageValidated={}",
@@ -560,6 +583,8 @@ public class ClientLocalStorageScreen extends ContainerScreen {
         if (accepted && sourceSlot >= 0) {
             carriedFromValidatedStorage = false;
             currentCarriedToken = 0L;
+            carriedSourceSlot = -1;
+            setCarriedForStorage(ItemStack.EMPTY, "insert_result_accepted_consumed_inventory_cursor");
         }
 
         if (!accepted && sourceSlot < 0) {
