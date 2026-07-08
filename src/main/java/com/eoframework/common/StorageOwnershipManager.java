@@ -21,8 +21,8 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.*;
 
 public class StorageOwnershipManager {
-    private static final int SCAN_RADIUS = 8;
-    private static final int SNAPSHOT_INTERVAL = 5;
+    private static final int SCAN_RADIUS = 4;
+    private static final int SNAPSHOT_INTERVAL = 40;
 
     private static int tickCounter = 0;
     private static final Map<GlobalPos, StorageSession> SESSIONS = new HashMap<>();
@@ -37,7 +37,7 @@ public class StorageOwnershipManager {
         if (tickCounter % SNAPSHOT_INTERVAL != 0) return;
 
         for (ServerPlayer player : level.players()) {
-            scanAroundPlayer(level, player);
+            EOFPerf.time("StorageOwnershipManager.scanAroundPlayer", () -> scanAroundPlayer(level, player));
         }
     }
 
@@ -46,12 +46,18 @@ public class StorageOwnershipManager {
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         Set<GlobalPos> processedStorages = new HashSet<>();
 
+        EOFDebug.log(EOFDebug.Flag.STORAGE_SNAPSHOT,
+                "[EOF Storage] scanAroundPlayer player={} radius={} yRange=3",
+                player.getGameProfile().getName(), SCAN_RADIUS);
+
         for (int x = -SCAN_RADIUS; x <= SCAN_RADIUS; x++) {
-            for (int y = -4; y <= 4; y++) {
+            for (int y = -1; y <= 1; y++) {
                 for (int z = -SCAN_RADIUS; z <= SCAN_RADIUS; z++) {
                     pos.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
 
+                    long getBlockEntityStart = EOFPerf.start();
                     BlockEntity be = level.getBlockEntity(pos);
+                    EOFPerf.warnIfSlow("StorageOwnershipManager.scanAroundPlayer level.getBlockEntity", System.nanoTime() - getBlockEntityStart);
                     if (!(be instanceof Container)) continue;
 
                     List<BlockPos> positions = storagePositions(level, pos.immutable());

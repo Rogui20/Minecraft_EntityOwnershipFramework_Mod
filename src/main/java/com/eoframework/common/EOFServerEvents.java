@@ -21,8 +21,14 @@ public class EOFServerEvents {
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-        sendReservedEntityIds(player);
-        ServerBlockLootProfileScanner.sendBlockLootProfiles(player);
+        EOFPerf.time("PlayerLoggedInEvent", () -> {
+            sendReservedEntityIds(player);
+            if (!EOFDebug.isDisabled("LootProfileSync")) {
+                ServerBlockLootProfileScanner.sendBlockLootProfiles(player);
+            } else {
+                EOFramework.LOGGER.warn("[EOF Debug] eof.debug.disableLootProfileSync=true; skipped initial loot profile sync for {}", player.getGameProfile().getName());
+            }
+        });
     }
 
     public static void sendReservedEntityIds(ServerPlayer player) {
@@ -30,10 +36,10 @@ public class EOFServerEvents {
         int count = 512;
         NEXT_RESERVED_ENTITY_ID += count;
 
-        PacketDistributor.sendToPlayer(
+        EOFPerf.time("PacketDistributor.sendReservedEntityIds", () -> PacketDistributor.sendToPlayer(
                 player,
                 new ReservedEntityIdsS2CPayload(start, count)
-        );
+        ));
 
         EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, 
                 "[EOF ClientAuthEntity] sent reserved ids start={} count={} player={}",
@@ -53,10 +59,16 @@ public class EOFServerEvents {
 
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
-        ChunkOwnershipManager.tick(event.getServer());
+        if (!EOFDebug.isDisabled("ChunkOwnershipSync")) {
+            EOFPerf.time("ChunkOwnershipManager.tick", () -> ChunkOwnershipManager.tick(event.getServer()));
+        }
         for (ServerLevel level : event.getServer().getAllLevels()) {
-            StorageOwnershipManager.tick(level);
-            ItemOwnershipManager.tick(level);
+            if (!EOFDebug.isDisabled("StorageSnapshots")) {
+                EOFPerf.time("StorageOwnershipManager.tick " + level.dimension().location(), () -> StorageOwnershipManager.tick(level));
+            }
+            if (!EOFDebug.isDisabled("ItemOwnership")) {
+                EOFPerf.time("ItemOwnershipManager.tick " + level.dimension().location(), () -> ItemOwnershipManager.tick(level));
+            }
         }
     }
 }
