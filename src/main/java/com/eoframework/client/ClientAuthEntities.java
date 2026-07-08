@@ -24,6 +24,8 @@ public class ClientAuthEntities {
     private static final Map<UUID, Long> OWNER_ASSIGNED_TICKS = new HashMap<>();
     private static final Map<UUID, Long> LAST_OWNERSHIP_REQUEST_TICKS = new HashMap<>();
     private static final long OWNERSHIP_COOLDOWN_TICKS = 40L;
+    private static final long OWNERSHIP_REQUEST_RATE_LIMIT_TICKS = 20L;
+    private static final double OWNERSHIP_REQUEST_RANGE_DIST_SQ = 12.0D * 12.0D;
     private static final double CLOSER_MARGIN_DIST_SQ = 0.25D;
 
     public static boolean isClientAuth(int id) {
@@ -188,12 +190,13 @@ public class ClientAuthEntities {
         if (mc.level == null || mc.player == null) return;
         long now = mc.level.getGameTime();
         if (now - OWNER_ASSIGNED_TICKS.getOrDefault(item.getUUID(), 0L) < OWNERSHIP_COOLDOWN_TICKS) return;
-        if (now - LAST_OWNERSHIP_REQUEST_TICKS.getOrDefault(item.getUUID(), Long.MIN_VALUE / 2) < 10L) return;
+        if (now - LAST_OWNERSHIP_REQUEST_TICKS.getOrDefault(item.getUUID(), Long.MIN_VALUE / 2) < OWNERSHIP_REQUEST_RATE_LIMIT_TICKS) return;
 
         UUID ownerUuid = ITEM_OWNERS.getOrDefault(item.getUUID(), item.getTarget());
         if (ownerUuid == null || ownerUuid.equals(mc.player.getUUID())) return;
         var owner = mc.level.getPlayerByUUID(ownerUuid);
         double requesterDistSq = mc.player.distanceToSqr(item);
+        if (requesterDistSq > OWNERSHIP_REQUEST_RANGE_DIST_SQ) return;
         double ownerDistSq = owner == null ? Double.POSITIVE_INFINITY : owner.distanceToSqr(item);
         if (requesterDistSq < ownerDistSq - CLOSER_MARGIN_DIST_SQ) {
             LAST_OWNERSHIP_REQUEST_TICKS.put(item.getUUID(), now);

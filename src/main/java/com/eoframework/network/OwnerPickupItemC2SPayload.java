@@ -64,6 +64,7 @@ public record OwnerPickupItemC2SPayload(
 
             if (player.getInventory().add(toAdd)) {
                 item.discard();
+                ItemOwnershipManager.unregister(item.getUUID());
                 player.containerMenu.broadcastChanges();
             }
         });
