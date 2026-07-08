@@ -7,6 +7,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -42,10 +44,19 @@ public class EOFServerEvents {
     }
 
     @SubscribeEvent
+    public static void onEntityLeaveLevel(EntityLeaveLevelEvent event) {
+        if (event.getLevel().isClientSide()) return;
+        if (event.getEntity() instanceof ItemEntity item) {
+            ItemOwnershipManager.unregister(item.getUUID());
+        }
+    }
+
+    @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         ChunkOwnershipManager.tick(event.getServer());
         for (ServerLevel level : event.getServer().getAllLevels()) {
             StorageOwnershipManager.tick(level);
+            ItemOwnershipManager.tick(level);
         }
     }
 }
