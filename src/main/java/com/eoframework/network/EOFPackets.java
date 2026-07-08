@@ -110,6 +110,18 @@ public class EOFPackets {
                 BlockBreakOwnerRequestS2CPayload::handle
         );
 
+        registrar.playToServer(
+                ChunkOwnershipClaimC2SPayload.TYPE,
+                ChunkOwnershipClaimC2SPayload.STREAM_CODEC,
+                ChunkOwnershipClaimC2SPayload::handle
+        );
+
+        registrar.playToServer(
+                ChunkOwnerLeavingC2SPayload.TYPE,
+                ChunkOwnerLeavingC2SPayload.STREAM_CODEC,
+                ChunkOwnerLeavingC2SPayload::handle
+        );
+
         registrar.playToClient(
                 ChunkOwnerSyncS2CPayload.TYPE,
                 ChunkOwnerSyncS2CPayload.STREAM_CODEC,

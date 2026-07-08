@@ -11,11 +11,27 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.event.AddReloadListenerEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 @EventBusSubscriber(modid = EOFramework.MODID, bus = EventBusSubscriber.Bus.GAME)
 public class EOFServerEvents {
     private static int NEXT_RESERVED_ENTITY_ID = 1_500_000_000;
+
+    @SubscribeEvent
+    public static void onServerStarted(ServerStartedEvent event) {
+        if (!EOFDebug.isDisabled("LootProfileSync")) {
+            ServerBlockLootProfileScanner.requestAsyncRebuild();
+        }
+    }
+
+    @SubscribeEvent
+    public static void onAddReloadListener(AddReloadListenerEvent event) {
+        if (!EOFDebug.isDisabled("LootProfileSync")) {
+            ServerBlockLootProfileScanner.requestAsyncRebuild();
+        }
+    }
 
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
@@ -61,6 +77,10 @@ public class EOFServerEvents {
     public static void onServerTick(ServerTickEvent.Post event) {
         if (!EOFDebug.isDisabled("ChunkOwnershipSync")) {
             EOFPerf.time("ChunkOwnershipManager.tick", () -> ChunkOwnershipManager.tick(event.getServer()));
+        }
+        ServerLevel overworld = event.getServer().overworld();
+        if (overworld != null && !EOFDebug.isDisabled("LootProfileSync")) {
+            EOFPerf.time("ServerBlockLootProfileScanner.tick", () -> ServerBlockLootProfileScanner.tick(overworld));
         }
         for (ServerLevel level : event.getServer().getAllLevels()) {
             if (!EOFDebug.isDisabled("StorageSnapshots")) {

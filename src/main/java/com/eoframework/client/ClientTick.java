@@ -19,6 +19,7 @@ public class ClientTick {
     public static void onClientTick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
+        ClientChunkOwnershipRuntime.tick();
         ClientAuthEntities.tickClientAuthPickups();
         ClientBlockBreakRuntime.tickOwnerAssists();
         if (mc.screen instanceof ClientLocalStorageScreen screen) {

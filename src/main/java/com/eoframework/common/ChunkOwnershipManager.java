@@ -1,7 +1,5 @@
 package com.eoframework.common;
 
-import com.eoframework.common.EOFDebug;
-import com.eoframework.EOFramework;
 import com.eoframework.network.ChunkOwnerSyncS2CPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
@@ -12,73 +10,70 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 public class ChunkOwnershipManager {
     private static final int SYNC_RADIUS_CHUNKS = 2;
-    private static final Map<ChunkKey, ChunkOwnershipState> OWNERSHIPS = new HashMap<>();
-    private static final Map<UUID, ChunkKey> PLAYER_CHUNKS = new HashMap<>();
+    private static final Map<DimensionChunkKey, ChunkOwnerState> OWNERSHIPS = new HashMap<>();
+    private static int cleanupTicker = 0;
+
+    public static void claim(ServerPlayer player, int chunkX, int chunkZ) {
+        ServerLevel level = player.serverLevel();
+        if (!isPlayerInChunk(player, chunkX, chunkZ)) return;
+        if (!level.getChunkSource().hasChunk(chunkX, chunkZ)) return;
+
+        DimensionChunkKey key = new DimensionChunkKey(level.dimension(), chunkX, chunkZ);
+        ChunkOwnerState state = OWNERSHIPS.computeIfAbsent(key, ignored -> new ChunkOwnerState());
+        if (state.ownerUuid == null) {
+            state.ownerUuid = player.getUUID();
+        } else if (!state.ownerUuid.equals(player.getUUID())) {
+            state.queue.add(player.getUUID());
+        }
+        promoteNextValid(level, key, state);
+        sync(level, key);
+    }
+
+    public static void leaving(ServerPlayer player, int chunkX, int chunkZ) {
+        ServerLevel level = player.serverLevel();
+        DimensionChunkKey key = new DimensionChunkKey(level.dimension(), chunkX, chunkZ);
+        ChunkOwnerState state = OWNERSHIPS.get(key);
+        if (state == null) return;
+        if (isPlayerInChunk(player, chunkX, chunkZ)) return;
+
+        state.queue.remove(player.getUUID());
+        if (player.getUUID().equals(state.ownerUuid)) {
+            state.ownerUuid = null;
+        }
+        promoteNextValid(level, key, state);
+        sync(level, key);
+    }
 
     public static void tick(MinecraftServer server) {
-        Set<UUID> seenPlayers = new HashSet<>();
-        Set<ChunkKey> changed = new HashSet<>();
-
-        EOFPerf.time("ChunkOwnershipManager.playerLoop", () -> {
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            seenPlayers.add(player.getUUID());
-            ChunkKey current = ChunkKey.from(player.serverLevel(), player.chunkPosition());
-            ChunkKey previous = PLAYER_CHUNKS.put(player.getUUID(), current);
-
-            if (previous != null && !previous.equals(current)) {
-                removeFromChunk(previous, player.getUUID(), changed);
-            }
-
-            ChunkOwnershipState state = OWNERSHIPS.computeIfAbsent(current, key -> new ChunkOwnershipState());
-            if (state.present.add(player.getUUID())) {
-                changed.add(current);
-            }
-            if (promoteOwner(state)) {
-                changed.add(current);
-            }
+        if (++cleanupTicker < 20) return;
+        cleanupTicker = 0;
+        List<DimensionChunkKey> changed = new ArrayList<>();
+        for (var entry : OWNERSHIPS.entrySet()) {
+            ServerLevel level = server.getLevel(entry.getKey().dimension);
+            if (level == null) continue;
+            if (promoteNextValid(level, entry.getKey(), entry.getValue())) changed.add(entry.getKey());
         }
-        });
-
-        List<UUID> stalePlayers = new ArrayList<>();
-        for (UUID uuid : PLAYER_CHUNKS.keySet()) {
-            if (!seenPlayers.contains(uuid)) stalePlayers.add(uuid);
+        for (DimensionChunkKey key : changed) {
+            ServerLevel level = server.getLevel(key.dimension);
+            if (level != null) sync(level, key);
         }
-        for (UUID uuid : stalePlayers) {
-            ChunkKey previous = PLAYER_CHUNKS.remove(uuid);
-            if (previous != null) removeFromChunk(previous, uuid, changed);
-        }
-
-        EOFPerf.time("ChunkOwnershipManager.changedSyncLoop size=" + changed.size(), () -> {
-            for (ChunkKey key : changed) {
-                syncChunk(server, key);
-            }
-        });
     }
 
     public static UUID getOwner(ServerLevel level, BlockPos pos) {
-        ChunkOwnershipState state = OWNERSHIPS.get(ChunkKey.from(level, new ChunkPos(pos)));
-        return state == null ? null : state.owner;
+        ChunkPos chunk = new ChunkPos(pos);
+        ChunkOwnerState state = OWNERSHIPS.get(new DimensionChunkKey(level.dimension(), chunk.x, chunk.z));
+        return state == null ? null : state.ownerUuid;
     }
 
     public static UUID getOrAssignOwner(ServerLevel level, BlockPos pos, ServerPlayer fallbackOwner) {
-        ChunkKey key = ChunkKey.from(level, new ChunkPos(pos));
-        ChunkOwnershipState state = OWNERSHIPS.computeIfAbsent(key, ignored -> new ChunkOwnershipState());
-        if (state.present.add(fallbackOwner.getUUID())) {
-            PLAYER_CHUNKS.put(fallbackOwner.getUUID(), key);
-        }
-        promoteOwner(state);
-        return state.owner;
+        ChunkPos chunk = new ChunkPos(pos);
+        claim(fallbackOwner, chunk.x, chunk.z);
+        UUID owner = getOwner(level, pos);
+        return owner != null ? owner : fallbackOwner.getUUID();
     }
 
     public static boolean isOwner(ServerLevel level, BlockPos pos, ServerPlayer player) {
@@ -87,67 +82,69 @@ public class ChunkOwnershipManager {
     }
 
     public static void removePlayer(UUID playerUuid) {
-        ChunkKey previous = PLAYER_CHUNKS.remove(playerUuid);
-        if (previous != null) {
-            Set<ChunkKey> changed = new HashSet<>();
-            removeFromChunk(previous, playerUuid, changed);
+        for (Iterator<Map.Entry<DimensionChunkKey, ChunkOwnerState>> it = OWNERSHIPS.entrySet().iterator(); it.hasNext();) {
+            Map.Entry<DimensionChunkKey, ChunkOwnerState> entry = it.next();
+            ChunkOwnerState state = entry.getValue();
+            state.queue.remove(playerUuid);
+            if (playerUuid.equals(state.ownerUuid)) state.ownerUuid = null;
+            if (state.ownerUuid == null && state.queue.isEmpty()) it.remove();
         }
     }
 
-    private static void removeFromChunk(ChunkKey key, UUID playerUuid, Set<ChunkKey> changed) {
-        ChunkOwnershipState state = OWNERSHIPS.get(key);
-        if (state == null) return;
-
-        if (state.present.remove(playerUuid)) changed.add(key);
-        if (playerUuid.equals(state.owner)) {
-            state.owner = null;
-            changed.add(key);
+    private static boolean promoteNextValid(ServerLevel level, DimensionChunkKey key, ChunkOwnerState state) {
+        UUID previous = state.ownerUuid;
+        state.queue.removeIf(uuid -> !isValidCandidate(level, key, uuid));
+        if (!isValidCandidate(level, key, state.ownerUuid)) {
+            state.ownerUuid = null;
+            Iterator<UUID> iterator = state.queue.iterator();
+            while (iterator.hasNext()) {
+                UUID candidate = iterator.next();
+                iterator.remove();
+                if (isValidCandidate(level, key, candidate)) {
+                    state.ownerUuid = candidate;
+                    break;
+                }
+            }
+            if (state.ownerUuid == null) {
+                for (ServerPlayer player : level.players()) {
+                    if (isPlayerInChunk(player, key.x, key.z)) {
+                        state.ownerUuid = player.getUUID();
+                        break;
+                    }
+                }
+            }
         }
-
-        if (state.present.isEmpty()) {
-            OWNERSHIPS.remove(key);
-            changed.add(key);
-        } else if (promoteOwner(state)) {
-            changed.add(key);
-        }
+        if (state.ownerUuid == null && state.queue.isEmpty()) OWNERSHIPS.remove(key);
+        return !Objects.equals(previous, state.ownerUuid);
     }
 
-    private static boolean promoteOwner(ChunkOwnershipState state) {
-        UUID previous = state.owner;
-        if (state.owner == null || !state.present.contains(state.owner)) {
-            state.owner = state.present.stream().findFirst().orElse(null);
-        }
-        return previous == null ? state.owner != null : !previous.equals(state.owner);
+    private static boolean isValidCandidate(ServerLevel level, DimensionChunkKey key, UUID uuid) {
+        if (uuid == null) return false;
+        ServerPlayer player = level.getServer().getPlayerList().getPlayer(uuid);
+        return player != null && player.serverLevel() == level && isPlayerInChunk(player, key.x, key.z);
     }
 
-    private static void syncChunk(MinecraftServer server, ChunkKey key) {
-        ServerLevel level = server.getLevel(key.dimension);
-        if (level == null) return;
+    private static boolean isPlayerInChunk(ServerPlayer player, int chunkX, int chunkZ) {
+        ChunkPos pos = player.chunkPosition();
+        return pos.x == chunkX && pos.z == chunkZ;
+    }
 
-        ChunkOwnershipState state = OWNERSHIPS.get(key);
-        UUID owner = state == null ? null : state.owner;
+    private static void sync(ServerLevel level, DimensionChunkKey key) {
+        ChunkOwnerState state = OWNERSHIPS.get(key);
+        UUID owner = state == null ? null : state.ownerUuid;
         ChunkOwnerSyncS2CPayload payload = new ChunkOwnerSyncS2CPayload(key.dimension.location().toString(), key.x, key.z, owner);
-
-        EOFPerf.time("ChunkOwnershipManager.syncChunk PacketDistributor loop", () -> {
         for (ServerPlayer player : level.players()) {
             ChunkPos playerChunk = player.chunkPosition();
             if (Math.abs(playerChunk.x - key.x) <= SYNC_RADIUS_CHUNKS && Math.abs(playerChunk.z - key.z) <= SYNC_RADIUS_CHUNKS) {
-                EOFPerf.time("PacketDistributor.sendChunkOwnerSync", () -> PacketDistributor.sendToPlayer(player, payload));
+                PacketDistributor.sendToPlayer(player, payload);
             }
         }
-        });
-
-        EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, "[EOF ChunkOwnership] sync dimension={} chunk=({}, {}) owner={} occupied={}", key.dimension.location(), key.x, key.z, owner, state != null ? state.present.size() : 0);
     }
 
-    private static class ChunkOwnershipState {
-        private UUID owner;
-        private final LinkedHashSet<UUID> present = new LinkedHashSet<>();
+    private static class ChunkOwnerState {
+        private UUID ownerUuid;
+        private final LinkedHashSet<UUID> queue = new LinkedHashSet<>();
     }
 
-    private record ChunkKey(ResourceKey<Level> dimension, int x, int z) {
-        static ChunkKey from(ServerLevel level, ChunkPos pos) {
-            return new ChunkKey(level.dimension(), pos.x, pos.z);
-        }
-    }
+    private record DimensionChunkKey(ResourceKey<Level> dimension, int x, int z) {}
 }

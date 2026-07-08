@@ -21,8 +21,56 @@ import java.util.*;
 
 public class ServerBlockLootProfileScanner {
     private static final int SAMPLES = 128;
+    private static final int STATES_PER_TICK = Integer.getInteger("eof.lootProfile.statesPerTick", 16);
     private static final Map<String, BlockLootProfileS2CPayload.StateLootProfile> CACHED_PROFILES = new LinkedHashMap<>();
+    private static final Map<String, BlockLootProfileS2CPayload.StateLootProfile> BUILDING_PROFILES = new LinkedHashMap<>();
     private static boolean cacheReady = false;
+    private static boolean building = false;
+    private static Iterator<BlockState> pendingStates = Collections.emptyIterator();
+
+    public static boolean isCacheReady() {
+        return cacheReady;
+    }
+
+    public static void requestAsyncRebuild() {
+        cacheReady = false;
+        building = false;
+        pendingStates = Collections.emptyIterator();
+        BUILDING_PROFILES.clear();
+    }
+
+    public static void startAsyncRebuild(ServerLevel level) {
+        List<BlockState> states = new ArrayList<>();
+        for (Block block : BuiltInRegistries.BLOCK) {
+            states.addAll(block.getStateDefinition().getPossibleStates());
+        }
+        BUILDING_PROFILES.clear();
+        pendingStates = states.iterator();
+        cacheReady = false;
+        building = true;
+        EOFramework.LOGGER.info("[EOF LootProfile] started lazy cache rebuild for {} block states", states.size());
+    }
+
+    public static void tick(ServerLevel level) {
+        if (EOFDebug.isDisabled("LootProfileSync")) return;
+        if (!building && !cacheReady) startAsyncRebuild(level);
+        if (!building) return;
+        int scanned = 0;
+        while (pendingStates.hasNext() && scanned++ < STATES_PER_TICK) {
+            scanStateIntoCache(level, pendingStates.next(), BUILDING_PROFILES);
+        }
+        if (!pendingStates.hasNext()) {
+            CACHED_PROFILES.clear();
+            CACHED_PROFILES.putAll(BUILDING_PROFILES);
+            BUILDING_PROFILES.clear();
+            cacheReady = true;
+            building = false;
+            EOFramework.LOGGER.info("[EOF LootProfile] lazy cache rebuild finished with {} profiles", CACHED_PROFILES.size());
+            for (ServerPlayer player : level.getServer().getPlayerList().getPlayers()) {
+                sendBlockLootProfiles(player);
+            }
+        }
+    }
 
     public static void sendBlockLootProfiles(ServerPlayer player) {
         EOFPerf.time("ServerBlockLootProfileScanner.sendBlockLootProfiles", () -> {
@@ -30,12 +78,10 @@ public class ServerBlockLootProfileScanner {
                 EOFramework.LOGGER.warn("[EOF LootProfile] sync disabled by eof.debug.disableLootProfileSync=true; player={}", player.getGameProfile().getName());
                 return;
             }
-            if (!cacheReady && !Boolean.getBoolean("eof.debug.forceLootProfileScanOnJoin")) {
-                EOFramework.LOGGER.warn("[EOF LootProfile] cache is not ready; skipped join-time full loot scan for {}. Set eof.debug.forceLootProfileScanOnJoin=true only for profiling.", player.getGameProfile().getName());
-                return;
-            }
             if (!cacheReady) {
-                rebuildCacheBlocking(player.serverLevel(), player);
+                EOFramework.LOGGER.warn("[EOF LootProfile] cache is not ready; skipped sync for {} without blocking join", player.getGameProfile().getName());
+                if (!building) startAsyncRebuild(player.serverLevel());
+                return;
             }
             EOFPerf.time("PacketDistributor.sendBlockLootProfiles", () -> PacketDistributor.sendToPlayer(player, new BlockLootProfileS2CPayload(new LinkedHashMap<>(CACHED_PROFILES))));
 
@@ -95,6 +141,24 @@ public class ServerBlockLootProfileScanner {
         });
     }
 
+    private static void scanStateIntoCache(ServerLevel level, BlockState state, Map<String, BlockLootProfileS2CPayload.StateLootProfile> profiles) {
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        String stateKey = stateKey(state);
+        Map<String, List<List<ItemStack>>> toolRolls = new LinkedHashMap<>();
+
+        for (ToolProfile profile : ToolProfile.values()) {
+            ItemStack tool = toolFor(level, profile);
+            List<List<ItemStack>> rolls = scanSamples(level, null, state, tool, SAMPLES);
+            if (hasLootTable(state) || rolls.stream().anyMatch(roll -> !roll.isEmpty())) {
+                toolRolls.put(profile.name(), rolls);
+            }
+        }
+
+        if (!toolRolls.isEmpty()) {
+            profiles.put(stateKey, new BlockLootProfileS2CPayload.StateLootProfile(blockId, stateKey, toolRolls));
+        }
+    }
+
     private static List<List<ItemStack>> scanSamples(
             ServerLevel level,
             ServerPlayer player,
@@ -126,10 +190,12 @@ public class ServerBlockLootProfileScanner {
     ) {
         try {
             LootParams.Builder params = new LootParams.Builder(level)
-                    .withParameter(LootContextParams.ORIGIN, player.position())
+                    .withParameter(LootContextParams.ORIGIN, player != null ? player.position() : net.minecraft.world.phys.Vec3.ZERO)
                     .withParameter(LootContextParams.BLOCK_STATE, state)
-                    .withParameter(LootContextParams.TOOL, tool)
-                    .withOptionalParameter(LootContextParams.THIS_ENTITY, player);
+                    .withParameter(LootContextParams.TOOL, tool);
+            if (player != null) {
+                params.withOptionalParameter(LootContextParams.THIS_ENTITY, player);
+            }
 
             return state.getDrops(params).stream()
                     .filter(s -> !s.isEmpty())
