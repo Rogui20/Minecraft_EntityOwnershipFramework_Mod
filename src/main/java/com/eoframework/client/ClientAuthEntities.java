@@ -1,5 +1,6 @@
 package com.eoframework.client;
 
+import com.eoframework.network.ItemOwnershipRequestC2SPayload;
 import com.eoframework.network.OwnerPickupItemC2SPayload;
 import com.eoframework.network.OwnerSpawnItemC2SPayload;
 import net.minecraft.client.Minecraft;
@@ -10,13 +11,20 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 public class ClientAuthEntities {
     private static final Set<Integer> CLIENT_AUTH_IDS = new HashSet<>();
     private static final Set<UUID> CLIENT_AUTH_UUIDS = new HashSet<>();
+    private static final Map<UUID, UUID> ITEM_OWNERS = new HashMap<>();
+    private static final Map<UUID, Long> OWNER_ASSIGNED_TICKS = new HashMap<>();
+    private static final Map<UUID, Long> LAST_OWNERSHIP_REQUEST_TICKS = new HashMap<>();
+    private static final long OWNERSHIP_COOLDOWN_TICKS = 40L;
+    private static final double CLOSER_MARGIN_DIST_SQ = 0.25D;
 
     public static boolean isClientAuth(int id) {
         return CLIENT_AUTH_IDS.contains(id);
@@ -42,6 +50,24 @@ public class ClientAuthEntities {
     public static void unmark(int id, UUID uuid) {
         CLIENT_AUTH_IDS.remove(id);
         CLIENT_AUTH_UUIDS.remove(uuid);
+        ITEM_OWNERS.remove(uuid);
+        OWNER_ASSIGNED_TICKS.remove(uuid);
+        LAST_OWNERSHIP_REQUEST_TICKS.remove(uuid);
+    }
+
+    public static void syncItemOwner(int entityId, UUID itemUuid, UUID ownerUuid, long ownerAssignedGameTime) {
+        Minecraft mc = Minecraft.getInstance();
+        ITEM_OWNERS.put(itemUuid, ownerUuid);
+        OWNER_ASSIGNED_TICKS.put(itemUuid, mc.level != null ? mc.level.getGameTime() : ownerAssignedGameTime);
+        Entity entity = mc.level == null ? null : mc.level.getEntity(entityId);
+        if (entity instanceof ItemEntity item) {
+            item.setTarget(ownerUuid);
+            if (mc.player != null && mc.player.getUUID().equals(ownerUuid)) {
+                mark(entityId, itemUuid);
+                item.setNoPickUpDelay();
+                item.setThrower(mc.player);
+            }
+        }
     }
 
     public static ItemEntity spawnLocalItem(int entityId, UUID uuid, ItemStack stack, double x, double y, double z, double vx, double vy, double vz) {
@@ -56,6 +82,8 @@ public class ClientAuthEntities {
         if (mc.player != null) {
             item.setTarget(mc.player.getUUID());
             item.setThrower(mc.player);
+            ITEM_OWNERS.put(uuid, mc.player.getUUID());
+            OWNER_ASSIGNED_TICKS.put(uuid, mc.level.getGameTime());
         }
 
         mc.level.addEntity(item);
@@ -108,8 +136,12 @@ public class ClientAuthEntities {
         var box = mc.player.getBoundingBox().inflate(1.0D, 0.5D, 1.0D);
 
         for (ItemEntity item : mc.level.getEntitiesOfClass(ItemEntity.class, box)) {
-            if (isClientAuth(item.getId()) || isClientAuth(item.getUUID())) {
-                tryPickupOwnerItem(item);
+            if (isClientAuth(item.getId()) || isClientAuth(item.getUUID()) || ITEM_OWNERS.containsKey(item.getUUID())) {
+                if (isLocalOwner(item)) {
+                    tryPickupOwnerItem(item);
+                } else {
+                    maybeRequestOwnership(item);
+                }
             }
         }
     }
@@ -122,7 +154,7 @@ public class ClientAuthEntities {
         if (stack.isEmpty()) return false;
 
         // Só interfere nos itens client-auth
-        if (!isClientAuth(item.getId())) {
+        if (!isClientAuth(item.getId()) || !isLocalOwner(item)) {
             return false;
         }
 
@@ -142,6 +174,31 @@ public class ClientAuthEntities {
         unmark(item.getId(), item.getUUID());
 
         return true;
+    }
+
+    private static boolean isLocalOwner(ItemEntity item) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return false;
+        UUID owner = ITEM_OWNERS.getOrDefault(item.getUUID(), item.getTarget());
+        return owner == null || owner.equals(mc.player.getUUID());
+    }
+
+    private static void maybeRequestOwnership(ItemEntity item) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) return;
+        long now = mc.level.getGameTime();
+        if (now - OWNER_ASSIGNED_TICKS.getOrDefault(item.getUUID(), 0L) < OWNERSHIP_COOLDOWN_TICKS) return;
+        if (now - LAST_OWNERSHIP_REQUEST_TICKS.getOrDefault(item.getUUID(), Long.MIN_VALUE / 2) < 10L) return;
+
+        UUID ownerUuid = ITEM_OWNERS.getOrDefault(item.getUUID(), item.getTarget());
+        if (ownerUuid == null || ownerUuid.equals(mc.player.getUUID())) return;
+        var owner = mc.level.getPlayerByUUID(ownerUuid);
+        double requesterDistSq = mc.player.distanceToSqr(item);
+        double ownerDistSq = owner == null ? Double.POSITIVE_INFINITY : owner.distanceToSqr(item);
+        if (requesterDistSq < ownerDistSq - CLOSER_MARGIN_DIST_SQ) {
+            LAST_OWNERSHIP_REQUEST_TICKS.put(item.getUUID(), now);
+            PacketDistributor.sendToServer(new ItemOwnershipRequestC2SPayload(item.getId(), item.getUUID()));
+        }
     }
 
     private static void playLocalPickupEffects(ItemEntity item, net.minecraft.client.player.LocalPlayer player) {

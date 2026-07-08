@@ -153,5 +153,17 @@ public class EOFPackets {
                 OwnerPickupItemC2SPayload::handle
         );
 
+        registrar.playToServer(
+                ItemOwnershipRequestC2SPayload.TYPE,
+                ItemOwnershipRequestC2SPayload.STREAM_CODEC,
+                ItemOwnershipRequestC2SPayload::handle
+        );
+
+        registrar.playToClient(
+                ItemOwnershipSyncS2CPayload.TYPE,
+                ItemOwnershipSyncS2CPayload.STREAM_CODEC,
+                ItemOwnershipSyncS2CPayload::handle
+        );
+
     }
 }

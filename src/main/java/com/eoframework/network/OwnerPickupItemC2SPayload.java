@@ -1,6 +1,7 @@
 package com.eoframework.network;
 
 import com.eoframework.EOFramework;
+import com.eoframework.common.ItemOwnershipManager;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -53,7 +54,7 @@ public record OwnerPickupItemC2SPayload(
             if (!(entity instanceof ItemEntity item)) return;
             if (item.getId() != payload.entityId()) return;
             if (item.distanceToSqr(player) > 3.0D * 3.0D) return;
-            if (item.getTarget() != null && !item.getTarget().equals(player.getUUID())) return;
+            if (!ItemOwnershipManager.isOwner(item, player.getUUID())) return;
 
             ItemStack stack = item.getItem();
             if (stack.isEmpty()) return;

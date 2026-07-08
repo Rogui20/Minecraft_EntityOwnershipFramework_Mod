@@ -20,7 +20,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.*;
 
 public class ServerBlockLootProfileScanner {
-    private static final int SAMPLES = 32;
+    private static final int SAMPLES = 128;
 
     public static void sendBlockLootProfiles(ServerPlayer player) {
         ServerLevel level = player.serverLevel();
@@ -38,9 +38,21 @@ public class ServerBlockLootProfileScanner {
                     ItemStack tool = toolFor(level, profile);
                     List<List<ItemStack>> rolls = scanSamples(level, player, state, tool, SAMPLES);
 
-                    if (!rolls.isEmpty()) {
+                    if (hasLootTable(state) || rolls.stream().anyMatch(roll -> !roll.isEmpty())) {
                         toolRolls.put(profile.name(), rolls);
                     }
+
+                    long emptyRolls = rolls.stream().filter(List::isEmpty).count();
+                    long nonEmptyRolls = rolls.size() - emptyRolls;
+                    EOFDebug.log(EOFDebug.Flag.CLIENT_AUTH_ITEM,
+                            "[LootProfile scan] block/state={} toolProfile={} sampleCount={} emptyRolls={} nonEmptyRolls={} exampleDrops={}",
+                            stateKey,
+                            profile.name(),
+                            rolls.size(),
+                            emptyRolls,
+                            nonEmptyRolls,
+                            rolls.stream().filter(roll -> !roll.isEmpty()).findFirst().orElse(List.of())
+                    );
                 }
 
                 if (!toolRolls.isEmpty()) {
@@ -70,18 +82,12 @@ public class ServerBlockLootProfileScanner {
         for (int i = 0; i < samples; i++) {
             List<ItemStack> drops = scanDrop(level, player, state, tool);
 
-            if (drops.isEmpty()) {
-                continue;
-            }
-
             List<ItemStack> roll = drops.stream()
                     .filter(s -> !s.isEmpty())
                     .map(ItemStack::copy)
                     .toList();
 
-            if (!roll.isEmpty()) {
-                result.add(roll);
-            }
+            result.add(roll);
         }
 
         return result;
@@ -107,6 +113,10 @@ public class ServerBlockLootProfileScanner {
         } catch (Throwable t) {
             return List.of();
         }
+    }
+
+    private static boolean hasLootTable(BlockState state) {
+        return !state.getBlock().getLootTable().equals(net.minecraft.world.level.storage.loot.BuiltInLootTables.EMPTY);
     }
 
     private static ItemStack toolFor(ServerLevel level, ToolProfile profile) {

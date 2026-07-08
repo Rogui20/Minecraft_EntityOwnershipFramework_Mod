@@ -1,6 +1,8 @@
 package com.eoframework.network;
 
 import com.eoframework.EOFramework;
+import com.eoframework.common.ItemOwnershipManager;
+import com.eoframework.network.ItemOwnershipSyncS2CPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -110,6 +112,10 @@ public record OwnerSpawnItemC2SPayload(
             item.setThrower(player);
 
             level.addFreshEntity(item);
+            ItemOwnershipManager.register(item, player.getUUID(), level.getGameTime());
+            ItemOwnershipSyncS2CPayload sync = new ItemOwnershipSyncS2CPayload(item.getId(), item.getUUID(), player.getUUID(), level.getGameTime());
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayersTrackingEntity(item, sync);
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player, sync);
         });
     }
 }
