@@ -20,6 +20,10 @@ public class ClientBlockLootProfiles {
         PROFILES.put(stateKey, profile);
     }
 
+    public static boolean hasProfile(BlockState state) {
+        return PROFILES.containsKey(stateKey(state));
+    }
+
     public static List<ItemStack> getDrops(BlockState state, ItemStack tool) {
         BlockLootProfileS2CPayload.StateLootProfile profile = PROFILES.get(stateKey(state));
         if (profile == null) {

@@ -42,6 +42,10 @@ public class ClientOwnedBlockRuntime {
         return true;
     }
 
+    public static boolean knowsChunkOwner(int chunkX, int chunkZ) {
+        return CHUNK_OWNERS.containsKey(new ChunkKey(currentDimension(), chunkX, chunkZ));
+    }
+
     public static boolean isCellOwnedByMe(BlockPos pos) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return false;
@@ -124,6 +128,16 @@ public class ClientOwnedBlockRuntime {
         if (!isKnownCellOwnedByMe(pos)) {
             EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, 
                     "[EOF spawnOwnerDrops] skip non-owner pos={} owner={} executor={}",
+                    pos,
+                    owner,
+                    localPlayer
+            );
+            return false;
+        }
+
+        if (!ClientBlockLootProfiles.hasProfile(state)) {
+            EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP,
+                    "[EOF spawnOwnerDrops] missing loot profile; falling back to server drops pos={} owner={} executor={}",
                     pos,
                     owner,
                     localPlayer
