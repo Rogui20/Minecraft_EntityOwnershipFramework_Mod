@@ -30,6 +30,7 @@ public class ChunkOwnershipManager {
         Set<UUID> seenPlayers = new HashSet<>();
         Set<ChunkKey> changed = new HashSet<>();
 
+        EOFPerf.time("ChunkOwnershipManager.playerLoop", () -> {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             seenPlayers.add(player.getUUID());
             ChunkKey current = ChunkKey.from(player.serverLevel(), player.chunkPosition());
@@ -47,6 +48,7 @@ public class ChunkOwnershipManager {
                 changed.add(current);
             }
         }
+        });
 
         List<UUID> stalePlayers = new ArrayList<>();
         for (UUID uuid : PLAYER_CHUNKS.keySet()) {
@@ -57,9 +59,11 @@ public class ChunkOwnershipManager {
             if (previous != null) removeFromChunk(previous, uuid, changed);
         }
 
-        for (ChunkKey key : changed) {
-            syncChunk(server, key);
-        }
+        EOFPerf.time("ChunkOwnershipManager.changedSyncLoop size=" + changed.size(), () -> {
+            for (ChunkKey key : changed) {
+                syncChunk(server, key);
+            }
+        });
     }
 
     public static UUID getOwner(ServerLevel level, BlockPos pos) {
@@ -124,12 +128,14 @@ public class ChunkOwnershipManager {
         UUID owner = state == null ? null : state.owner;
         ChunkOwnerSyncS2CPayload payload = new ChunkOwnerSyncS2CPayload(key.dimension.location().toString(), key.x, key.z, owner);
 
+        EOFPerf.time("ChunkOwnershipManager.syncChunk PacketDistributor loop", () -> {
         for (ServerPlayer player : level.players()) {
             ChunkPos playerChunk = player.chunkPosition();
             if (Math.abs(playerChunk.x - key.x) <= SYNC_RADIUS_CHUNKS && Math.abs(playerChunk.z - key.z) <= SYNC_RADIUS_CHUNKS) {
-                PacketDistributor.sendToPlayer(player, payload);
+                EOFPerf.time("PacketDistributor.sendChunkOwnerSync", () -> PacketDistributor.sendToPlayer(player, payload));
             }
         }
+        });
 
         EOFDebug.log(EOFDebug.Flag.BLOCK_OWNERSHIP, "[EOF ChunkOwnership] sync dimension={} chunk=({}, {}) owner={} occupied={}", key.dimension.location(), key.x, key.z, owner, state != null ? state.present.size() : 0);
     }

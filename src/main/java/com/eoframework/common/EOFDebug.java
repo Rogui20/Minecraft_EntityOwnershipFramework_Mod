@@ -32,6 +32,11 @@ public final class EOFDebug {
         return ENABLED.contains(flag);
     }
 
+    public static boolean isDisabled(String camelCaseName) {
+        return Boolean.getBoolean("eof.debug.disable" + camelCaseName);
+    }
+
+
     public static void log(Flag flag, String msg, Object... args) {
         if (!isEnabled(flag)) return;
         EOFramework.LOGGER.info("[EOF {}] " + msg, prepend(flag, args));
